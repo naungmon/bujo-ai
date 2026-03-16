@@ -503,9 +503,8 @@ class DailyView(Screen):
             )
             yield Static("", id="inline-display")
             yield Static("", id="hint-bar")
-            # Normal input bar
-            yield Static("\u25b8 ", id="input-prompt")
-            yield Input(placeholder="", id="main-input")
+            # Manual input bar (no Input widget — keys handled directly)
+            yield Static("", id="input-bar")
             # Dump mode (hidden initially)
             yield Static(
                 "[dim italic]dump mode[/dim italic]", id="dump-label", display=False
@@ -515,9 +514,8 @@ class DailyView(Screen):
 
     def on_mount(self) -> None:
         self._current_coach_mode = False
+        self._input_text = ""
         self.refresh_log()
-        # Ensure input has focus after layout settles
-        self.set_timer(0.05, lambda: self.query_one("#main-input", Input).focus())
 
     def refresh_log(self) -> None:
         from bujo.analytics import InsightsEngine
@@ -557,7 +555,6 @@ class DailyView(Screen):
             )
             # Session detection: empty → input mode
             self.nav_mode = False
-            self.set_timer(0.05, lambda: self._set_input_focus())
         else:
             empty_hint.display = False
             lv.display = True
@@ -581,7 +578,6 @@ class DailyView(Screen):
             )
             # Session detection: entries exist → nav mode
             self.nav_mode = True
-            self.set_timer(0.05, lambda: self._set_nav_focus_last())
 
         # First-run check
         if not FIRST_RUN_FLAG.exists() and not has_any_daily_files():
@@ -609,8 +605,7 @@ class DailyView(Screen):
         pass  # greeting is set by refresh_log
 
     def _set_input_focus(self) -> None:
-        inp = self.query_one("#main-input", Input)
-        inp.focus()
+        self._update_input_display()
 
     def _set_nav_focus_last(self) -> None:
         lv = self.query_one("#entry-list", ListView)
@@ -619,11 +614,17 @@ class DailyView(Screen):
             # Move to last entry
             lv.index = len(lv.children) - 1
 
+    def _update_input_display(self) -> None:
+        bar = self.query_one("#input-bar", Static)
+        if self.nav_mode:
+            bar.update(f"[dim]\u25b8[/dim] [dim]{self._input_text}[/dim]")
+        else:
+            bar.update(f"[bold cyan]\u25b8[/bold cyan] {self._input_text}")
+
     def _update_hint_bar(self) -> None:
         hint = self.query_one("#hint-bar", Static)
-        prompt = self.query_one("#input-prompt", Static)
+        self._update_input_display()
         if self.nav_mode:
-            prompt.update("[dim]\u25b8[/dim]")
             hint.update(
                 "[dim italic][nav][/dim italic]  "
                 "[dim]\u2191\u2193 move[/dim]  "
@@ -634,7 +635,6 @@ class DailyView(Screen):
                 "[dim]Escape back[/dim]"
             )
         else:
-            prompt.update("[bold cyan]\u25b8[/bold cyan]")
             hint.update(
                 "[dim italic][input][/dim italic]  "
                 "[dim]Ctrl+B coach[/dim]  "
@@ -700,11 +700,10 @@ class DailyView(Screen):
         # Mark old as migrated
         self._rewrite_entry(entry["raw"], ">", entry["text"])
         # Pre-fill input with text
-        inp = self.query_one("#main-input", Input)
-        inp.value = entry["text"]
+        self._input_text = entry["text"]
         # Switch to input mode
         self.nav_mode = False
-        inp.focus()
+        self._update_input_display()
 
     @work(thread=True)
     def action_coach(self) -> None:
@@ -783,9 +782,6 @@ class DailyView(Screen):
             lines.append("[dim italic]any key to close[/dim italic]")
             inline.update("\n".join(lines))
 
-        # Dismiss on any key
-        self.query_one("#main-input", Input).focus()
-
     def _close_coach(self) -> None:
         self._current_coach_mode = False
         inline = self.query_one("#inline-display", Static)
@@ -793,14 +789,12 @@ class DailyView(Screen):
         inline.display = False
         self.refresh_log()
 
-    @on(Input.Submitted, "#main-input")
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        if self._current_coach_mode:
-            self._close_coach()
-            event.input.clear()
-            return
+    def _submit_input(self) -> None:
+        """Submit the current input buffer."""
+        text = self._input_text.strip()
+        self._input_text = ""
+        self._update_input_display()
 
-        text = event.value.strip()
         if not text:
             # Empty submit: if not in nav mode, maybe switch to nav
             if not self.nav_mode:
@@ -819,16 +813,14 @@ class DailyView(Screen):
         if not FIRST_RUN_FLAG.exists():
             FIRST_RUN_FLAG.write_text("done\n", encoding="utf-8")
 
-        event.input.clear()
         self.refresh_log()
 
     def _enter_dump_mode(self) -> None:
         """Enter dump mode with multiline TextArea."""
         self.dump_mode = True
-        # Hide normal input
+        # Hide input bar
         try:
-            self.query_one("#main-input", Input).display = False
-            self.query_one("#input-prompt", Static).display = False
+            self.query_one("#input-bar", Static).display = False
         except Exception:
             pass
         # Show dump input area
@@ -853,13 +845,7 @@ class DailyView(Screen):
             self.query_one("#dump-label", Static).display = False
         except Exception:
             pass
-        # Show normal input
-        try:
-            self.query_one("#main-input", Input).display = True
-            self.query_one("#input-prompt", Static).display = True
-            self.set_timer(0.05, lambda: self._set_input_focus())
-        except Exception:
-            pass
+        self._update_input_display()
         self._update_hint_bar()
 
     @work(thread=True)
@@ -957,78 +943,124 @@ class DailyView(Screen):
 
         # Escape toggles mode regardless of current mode
         if key == "escape":
+            self._input_text = ""
             if self.nav_mode:
                 self.nav_mode = False
-                self.set_timer(0.01, lambda: self._set_input_focus())
+                self._update_input_display()
             else:
                 entries = parse_entries(today_log(), today_path(), date.today())
                 if entries:
                     self.nav_mode = True
-                    self.set_timer(0.01, lambda: self._set_nav_focus_last())
+                    self._set_nav_focus_last()
+                else:
+                    self._update_input_display()
             event.stop()
             return
 
-        # All remaining keys only active in nav_mode
-        if not self.nav_mode:
+        # Enter submits input in input mode
+        if key == "enter" and not self.nav_mode:
+            self._submit_input()
+            event.stop()
             return
 
-        if key == "up":
-            lv = self.query_one("#entry-list", ListView)
-            if lv.children and lv.index is not None and lv.index > 0:
-                lv.index -= 1
+        # Backspace deletes last char in input mode
+        if key == "backspace" and not self.nav_mode:
+            if self._input_text:
+                self._input_text = self._input_text[:-1]
+                self._update_input_display()
             event.stop()
-        elif key == "down":
-            lv = self.query_one("#entry-list", ListView)
-            if lv.children and lv.index is not None and lv.index < len(lv.children) - 1:
-                lv.index += 1
-            event.stop()
-        elif key == "x":
-            entry = self._get_selected_entry()
-            if entry:
-                self._rewrite_entry(entry["raw"], "x", entry["text"])
-                self.refresh_log()
-            event.stop()
-        elif key == "k":
-            entry = self._get_selected_entry()
-            if entry:
-                self._rewrite_entry(entry["raw"], "k", entry["text"])
-                self.refresh_log()
-            event.stop()
-        elif key == ">":
-            entry = self._get_selected_entry()
-            if entry:
-                self._rewrite_entry(entry["raw"], ">", entry["text"])
-                self.refresh_log()
-            event.stop()
-        elif key == "r":
-            entry = self._get_selected_entry()
-            if entry:
-                self._rewrite_entry(entry["raw"], ">", entry["text"])
-                inp = self.query_one("#main-input", Input)
-                inp.value = entry["text"]
+            return
+
+        # Handle nav mode actions
+        if self.nav_mode:
+            if key == "up":
+                lv = self.query_one("#entry-list", ListView)
+                if lv.children and lv.index is not None and lv.index > 0:
+                    lv.index -= 1
+                event.stop()
+                return
+            elif key == "down":
+                lv = self.query_one("#entry-list", ListView)
+                if (
+                    lv.children
+                    and lv.index is not None
+                    and lv.index < len(lv.children) - 1
+                ):
+                    lv.index += 1
+                event.stop()
+                return
+            elif key == "x":
+                entry = self._get_selected_entry()
+                if entry:
+                    self._rewrite_entry(entry["raw"], "x", entry["text"])
+                    self.refresh_log()
+                event.stop()
+                return
+            elif key == "k":
+                entry = self._get_selected_entry()
+                if entry:
+                    self._rewrite_entry(entry["raw"], "k", entry["text"])
+                    self.refresh_log()
+                event.stop()
+                return
+            elif key == ">":
+                entry = self._get_selected_entry()
+                if entry:
+                    self._rewrite_entry(entry["raw"], ">", entry["text"])
+                    self.refresh_log()
+                event.stop()
+                return
+            elif key == "r":
+                entry = self._get_selected_entry()
+                if entry:
+                    self._rewrite_entry(entry["raw"], ">", entry["text"])
+                    self._input_text = entry["text"]
+                    self.nav_mode = False
+                    self._update_input_display()
+                event.stop()
+                return
+            elif key == "m":
+                self.app.push_screen(MonthlyView())
+                event.stop()
+                return
+            elif key == "f":
+                self.app.push_screen(FutureView())
+                event.stop()
+                return
+            elif key == "shift+m":
+                self.app.push_screen(MigrationScreen())
+                event.stop()
+                return
+            elif key == "question_mark":
+                self.app.push_screen(HelpScreen())
+                event.stop()
+                return
+            elif key == "q":
+                self.app.exit()
+                event.stop()
+                return
+            elif key in ("t", "n", "e", "star", "p"):
+                # Prefix key typed in nav mode — switch to input, add key to buffer
                 self.nav_mode = False
-                self.set_timer(0.01, lambda: inp.focus())
-            event.stop()
-        elif key == "m":
-            self.app.push_screen(MonthlyView())
-            event.stop()
-        elif key == "f":
-            self.app.push_screen(FutureView())
-            event.stop()
-        elif key == "shift+m":
-            self.app.push_screen(MigrationScreen())
-            event.stop()
-        elif key == "question_mark":
-            self.app.push_screen(HelpScreen())
-            event.stop()
-        elif key == "q":
-            self.app.exit()
-            event.stop()
-        elif key in ("t", "n", "e", "star", "p"):
-            # Prefix key typed in nav mode — switch to input, let key fall through
-            self.nav_mode = False
-            self.set_timer(0.01, lambda: self._set_input_focus())
-            # Don't stop event — let it reach the Input widget
+                prefix_map = {"t": "t ", "n": "n ", "e": "e ", "star": "* ", "p": "p "}
+                self._input_text = prefix_map.get(key, "")
+                self._update_input_display()
+                event.stop()
+                return
+            return
+
+        # Input mode: handle printable characters
+        if (
+            key.startswith("shift+")
+            or len(key) == 1
+            or (len(key) == 2 and key[0].isalpha())
+        ):
+            # Get the actual character
+            char = event.character
+            if char and char.isprintable() and char not in ("\n", "\r", "\t"):
+                self._input_text += char
+                self._update_input_display()
+                event.stop()
 
 
 # ── App ────────────────────────────────────────────────
