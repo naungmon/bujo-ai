@@ -74,14 +74,12 @@ class TestParseQuickInput:
     def test_priority_p_prefix(self):
         assert parse_quick_input("p finish report") == ("*", "finish report")
 
-    # t/ as prefix is NOT special — falls through to default task
-    def test_task_word_is_default(self):
-        """'task' as prefix is NOT stripped — it's just a task."""
-        assert parse_quick_input("task call jackson") == ("t", "task call jackson")
+    # Rule 7: task prefix
+    def test_task_word(self):
+        assert parse_quick_input("task call jackson") == ("t", "call jackson")
 
-    def test_t_not_stripped(self):
-        """'t' as prefix falls through to default task."""
-        assert parse_quick_input("t buy milk") == ("t", "t buy milk")
+    def test_task_short(self):
+        assert parse_quick_input("t buy milk") == ("t", "buy milk")
 
     # Edge cases
     def test_empty_string(self):

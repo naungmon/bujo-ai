@@ -9,17 +9,14 @@ def parse_quick_input(text: str) -> tuple[str, str]:
     """Parse input text and return (symbol, cleaned_text).
 
     Rules applied in order:
-    1. note: or n: or note  -> ('n', rest)
-    2. event: or e: or event -> ('e', rest)
-    3. done: or done  -> ('x', rest)
+    1. note:, note , n:  -> ('n', rest)
+    2. event:, event , e: -> ('e', rest)
+    3. done:, done  -> ('x', rest)
     4. ! at start or end -> ('*', stripped)
     5. contains important/urgent -> ('*', text without keyword)
-    6. p or priority prefix -> ('*', rest)
-    7. default (task) -> ('t', text)
-
-    Note: 't ' is NOT a prefix — it falls through to default task.
-    Only single-char prefixes (n, e, x) use ':' separator or are keywords.
-    Multi-word prefixes (note, event, done, priority) work with space separator.
+    6. priority , p  -> ('*', rest)
+    7. task , t  -> ('t', rest)
+    8. default -> ('t', text)
     """
     text = text.strip()
     if not text:
@@ -71,7 +68,13 @@ def parse_quick_input(text: str) -> tuple[str, str]:
     if lower.startswith("p ") and not lower.startswith("pi"):  # not "pi" (privacy, etc)
         return ("*", text[2:].strip())
 
-    # Rule 7: default (task)
+    # Rule 7: task prefix (task , t )
+    if lower.startswith("task "):
+        return ("t", text[5:].strip())
+    if lower.startswith("t "):
+        return ("t", text[2:].strip())
+
+    # Rule 8: default (task, no prefix stripped)
     return ("t", text)
 
 
