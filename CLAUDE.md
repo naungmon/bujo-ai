@@ -47,7 +47,6 @@ bujo add * "text"     # add priority
 bujo add e "text"     # add event
 bujo capture "text"   # NLP auto-detect (note: → n, ! → *, etc.)
 bujo log              # print today
-bujo summary          # raw log dump
 bujo coach            # JSON for AI coaching
 bujo coach --human    # readable coaching output
 bujo insights         # analytics dashboard
@@ -57,20 +56,49 @@ bujo template morning # apply template
 bujo vault            # show vault path
 ```
 
-## TUI screens
+## TUI interaction model
+
+The TUI uses an **input-first** design. Always-on input bar at the bottom.
+No modals. No "press a to add." Just type.
+
+### Session detection
+
+- **Empty today** → input mode (input bar focused, cursor blinking)
+- **Entries exist** → nav mode (list focused, cursor on last entry)
+
+### Two modes
+
+| Mode | Prompt color | Action |
+|------|-------------|--------|
+| Input | `▸` bright cyan | Type and Enter to capture |
+| Nav | `▸` dim | Arrow keys + x/k/>/r to update |
+
+Press **Escape** to toggle between modes.
+
+### Prefix system (TUI input bar + CLI capture)
+
+| Prefix | Type | Example |
+|--------|------|---------|
+| `t` or `task` | Task | `t buy milk` |
+| `n` or `note` | Note | `note feeling good` |
+| `e` or `event` | Event | `event meeting at 3` |
+| `*`, `priority`, `p` | Priority | `* finish report` |
+| `x` or `done` | Done | `done wrote tests` |
+| `k` or `kill` | Killed | `k that idea` |
+| `>` | Migrated | `> carry forward` |
+| (no prefix) | Note | `feeling focused` |
+| `!` at end | Priority | `finish report!` |
+
+### TUI screens
 
 | Key | Screen | Purpose |
 |-----|--------|---------|
-| (launch) | DailyView | Main entry list, time-aware header |
-| a | AddEntryScreen | Type-first input, auto-detects symbol |
-| m | MonthlyView | Monthly priorities (3-5) |
-| f | FutureView | Parked items |
-| r | ReflectionView | Starred insights |
-| M | MigrationScreen | Review pending tasks |
-| i | InsightsView | Analytics dashboard |
-| Q | QuickCaptureScreen | Same as AddEntryScreen |
-| e | — | Open in $EDITOR |
-| ? | HelpScreen | All keybindings |
+| (launch) | DailyView | Main entry list, always-on input bar |
+| `m` | MonthlyView | Monthly priorities (3-5) |
+| `f` | FutureView | Parked items |
+| `M` | MigrationScreen | Review pending tasks |
+| `Ctrl+B` | Coach | Inline coaching (any key dismisses) |
+| `?` | HelpScreen | All keybindings |
 
 ## Coaching context
 

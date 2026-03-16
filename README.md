@@ -18,30 +18,99 @@ cd bujo-cli
 pip install -e .
 ```
 
-## Quick Start (60 seconds)
+## Quick Start
 
-```bash
-bujo add t "buy milk"          # add a task
-bujo add n "feeling focused"   # add a note
-bujo add "*" "finish report"   # add a priority
-bujo log                        # see today's entries
-bujo                            # launch the TUI
 ```
+$ bujo
+
+▸ _
+```
+
+Type directly. That's it. No menus, no buttons, no "press Enter to continue."
+
+```
+▸ t gotta call jackson          ← Enter →  · gotta call jackson
+▸ e digital nomad club today    ← Enter →  ○ digital nomad club today
+▸ feeling scattered             ← Enter →  – feeling scattered  (no prefix = note)
+▸ finish the report!            ← Enter →  ★ finish the report
+▸ done: wrote the tests         ← Enter →  × wrote the tests
+▸ k that rebrand idea           ← Enter →  ~ that rebrand idea
+▸ > follow up Tyson             ← Enter →  > follow up Tyson
+```
+
+The prefix sets the type. Everything after is the content. No prefix → note.
+
+## How It Works
+
+### Opening the app
+
+**First time today (empty log):** The input bar is focused. Cursor blinks.
+Start typing. The app already knows you're here to capture.
+
+**Returning (entries exist):** The entry list is focused. Cursor lands on
+the last entry. You can immediately arrow through and update things. The
+input bar is still there — type anything to drop back into capture mode.
+
+The app decides the starting state. Not you.
+
+### Two modes
+
+**Input mode** — `▸` in bright cyan. You're capturing. Type and Enter.
+The `▸` prompt is your anchor. Everything else is dim.
+
+**Nav mode** — `▸` dimmed. You're reviewing. Arrow through entries and
+update them.
+
+Press **Escape** to toggle between modes. That's the only key you need
+to remember.
+
+### Nav mode actions
+
+| Key | Action |
+|-----|--------|
+| ↑ ↓ | Move through entries |
+| `x` | Mark selected done |
+| `k` | Kill selected |
+| `>` | Migrate selected |
+| `r` | Retype (edit entry text) |
+
+### Prefix system
+
+Works everywhere — the TUI input bar and the CLI `bujo capture` command.
+
+| Prefix | Type | Example |
+|--------|------|---------|
+| `t` or `task` | Task | `t buy milk` |
+| `n` or `note` | Note | `note feeling good` |
+| `e` or `event` | Event | `event meeting at 3` |
+| `*`, `priority`, or `p` | Priority | `* finish report` |
+| `x` or `done` | Done | `done wrote tests` |
+| `k` or `kill` | Killed | `k that idea` |
+| `>` | Migrated | `> carry forward` |
+| (no prefix) | Note | `feeling focused` |
+| `!` at end | Priority | `finish report!` |
+| `important` / `urgent` | Priority | `fix bug important` |
+
+### Session detection
+
+The app reads the room on launch:
+
+- **Empty today** → input mode, cursor ready
+- **Entries exist** → nav mode, cursor on last entry
+
+Someone reopening bujo mid-day didn't open it to stare at a blinking cursor.
+They came back to update what happened. The app knows that.
 
 ## TUI Screens
 
 | Key | Screen | Purpose |
 |-----|--------|---------|
-| — | DailyView | Main entry list with time-aware header |
-| `a` | AddEntryScreen | Type-first input, auto-detects symbol |
+| (launch) | DailyView | Main entry list, always-on input bar |
 | `m` | MonthlyView | Monthly priorities (3-5 max) |
 | `f` | FutureView | Parked items, not dead |
-| `r` | ReflectionView | Starred insights worth keeping |
-| `M` | MigrationScreen | Review and decide on pending tasks |
-| `i` | InsightsView | Analytics dashboard |
-| `Q` | QuickCaptureScreen | Fast capture from anywhere |
-| `e` | — | Open today's file in `$EDITOR` |
-| `?` | HelpScreen | All keybindings |
+| `M` | MigrationScreen | Review pending tasks |
+| `Ctrl+B` | Coach | Inline coaching (any key dismisses) |
+| `?` | HelpScreen | Keybinding reference |
 
 ## CLI Commands
 
@@ -51,7 +120,6 @@ bujo                            # launch the TUI
 | `bujo add t\|n\|*\|e\|x\|k "text"` | Add entry (ASCII symbol) |
 | `bujo capture "text"` | NLP auto-detect and add |
 | `bujo log` | Print today's log |
-| `bujo summary` | Raw log dump |
 | `bujo coach` | JSON for AI coaching |
 | `bujo coach --human` | Readable coaching output |
 | `bujo insights` | Analytics dashboard |
@@ -74,23 +142,19 @@ Files store ASCII. The TUI renders as Unicode.
 | `e` | ○ | Event |
 | `*` | ★ | Priority |
 
-## NLP Capture
+## Coaching (Ctrl+B)
 
-The `bujo capture` command detects the symbol from your text:
+Press `Ctrl+B` from the DailyView to get inline coaching.
 
-| Input | Result |
-|-------|--------|
-| `bujo capture "buy milk"` | · task |
-| `bujo capture "note: feeling good"` | – note |
-| `bujo capture "event: meeting at 3pm"` | ○ event |
-| `bujo capture "standup tomorrow"` | · task |
-| `bujo capture "finish the report!"` | ★ priority |
-| `bujo capture "done: wrote tests"` | × done |
-| `bujo capture "fix bug important"` | ★ priority |
+- **Fewer than 5 entries:** A gentle nudge to keep logging.
+- **5+ entries:** Full analysis — momentum, streak, stuck tasks, kill
+  themes, most productive time, and one coaching question.
+
+No JSON output. No modal. No box. Just text in the list area. Any key closes.
 
 ## Time-Aware Greetings
 
-The TUI header adapts to your time of day and context:
+The header adapts to your time of day and context:
 
 - **Morning** (05:00–11:59): Energetic, forward-looking
 - **Afternoon** (12:00–16:59): Grounded, progress-focused
@@ -102,14 +166,10 @@ Fridays suggest migration before the weekend.
 
 ## Analytics
 
-### `bujo insights`
+### `bujo coach` (JSON)
 
-Shows momentum (building/steady/stalling/stalled), streak, completion rate,
-priority alignment, stuck tasks, and kill patterns.
+Returns structured data for AI integration:
 
-### `bujo coach`
-
-Returns structured JSON with:
 - Stuck tasks (migrated 3+ times)
 - Kill themes (what categories get dropped)
 - Momentum score
@@ -200,7 +260,7 @@ export BUJO_VAULT=/path/to/your/obsidian/vault/bujo
 | `BUJO_VAULT` | Vault location | `~/bujo-vault/` |
 | `BUJO_OBSIDIAN_FRONTMATTER` | Add YAML frontmatter | off |
 | `BUJO_DASHBOARD` | Generate dashboard.md | off |
-| `EDITOR` / `VISUAL` | Editor for `e` key | notepad (Win) / nano |
+| `EDITOR` / `VISUAL` | Editor for raw editing | notepad (Win) / nano |
 
 ## Contributing
 
