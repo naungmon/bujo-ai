@@ -510,7 +510,6 @@ class DailyView(Screen):
                 "[dim italic]dump mode[/dim italic]", id="dump-label", display=False
             )
             yield TextArea(id="dump-input", display=False)
-        yield Footer()
 
     def on_mount(self) -> None:
         self._current_coach_mode = False
@@ -1050,17 +1049,20 @@ class DailyView(Screen):
             return
 
         # Input mode: handle printable characters
-        if (
-            key.startswith("shift+")
-            or len(key) == 1
-            or (len(key) == 2 and key[0].isalpha())
-        ):
-            # Get the actual character
-            char = event.character
-            if char and char.isprintable() and char not in ("\n", "\r", "\t"):
-                self._input_text += char
-                self._update_input_display()
-                event.stop()
+        # Accept any key that has a printable character
+        char = event.character
+        if char and char.isprintable() and char not in ("\n", "\r", "\t"):
+            self._input_text += char
+            self._update_input_display()
+            event.stop()
+            return
+
+        # Also handle keys without character attribute (like "space")
+        if key == "space":
+            self._input_text += " "
+            self._update_input_display()
+            event.stop()
+            return
 
 
 # ── App ────────────────────────────────────────────────
@@ -1081,7 +1083,8 @@ class BuJoApp(App):
 def main() -> None:
     ensure_vault()
     app = BuJoApp()
-    app.run()
+    # Run with explicit terminal settings for better Windows compatibility
+    app.run(headless=False, size=(80, 24))
 
 
 if __name__ == "__main__":
