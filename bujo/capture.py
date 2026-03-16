@@ -9,12 +9,17 @@ def parse_quick_input(text: str) -> tuple[str, str]:
     """Parse input text and return (symbol, cleaned_text).
 
     Rules applied in order:
-    1. starts with 'note:' or 'n:'        -> ('n', rest)
-    2. starts with 'event:' or 'e:'       -> ('e', rest)
-    3. ends with '!' or starts with '!'   -> ('*', stripped text)
-    4. contains ' important' or ' urgent' -> ('*', text without keyword)
-    5. done: starts with 'done'           -> ('x', rest)
-    6. default                            -> ('t', text)
+    1. note: or n: or note  -> ('n', rest)
+    2. event: or e: or event -> ('e', rest)
+    3. done: or done  -> ('x', rest)
+    4. ! at start or end -> ('*', stripped)
+    5. contains important/urgent -> ('*', text without keyword)
+    6. p or priority prefix -> ('*', rest)
+    7. default (task) -> ('t', text)
+
+    Note: 't ' is NOT a prefix — it falls through to default task.
+    Only single-char prefixes (n, e, x) use ':' separator or are keywords.
+    Multi-word prefixes (note, event, done, priority) work with space separator.
     """
     text = text.strip()
     if not text:
@@ -22,20 +27,31 @@ def parse_quick_input(text: str) -> tuple[str, str]:
 
     lower = text.lower()
 
-    # Rule 1: note prefix
-    if lower.startswith("note:") or lower.startswith("n:"):
-        prefix_len = 5 if lower.startswith("note:") else 2
-        return ("n", text[prefix_len:].strip())
+    # Rule 1: note prefix (n:, note:, note )
+    if lower.startswith("note ") or lower.startswith("note:") or lower.startswith("n:"):
+        if lower.startswith("note:"):
+            return ("n", text[5:].strip())
+        elif lower.startswith("note "):
+            return ("n", text[5:].strip())
+        else:
+            return ("n", text[2:].strip())
 
-    # Rule 2: event prefix
-    if lower.startswith("event:") or lower.startswith("e:"):
-        prefix_len = 6 if lower.startswith("event:") else 2
-        return ("e", text[prefix_len:].strip())
+    # Rule 2: event prefix (e:, event:, event )
+    if (
+        lower.startswith("event ")
+        or lower.startswith("event:")
+        or lower.startswith("e:")
+    ):
+        if lower.startswith("event:"):
+            return ("e", text[6:].strip())
+        elif lower.startswith("event "):
+            return ("e", text[6:].strip())
+        else:
+            return ("e", text[2:].strip())
 
-    # Rule 3: done prefix
+    # Rule 3: done prefix (done:, done )
     if lower.startswith("done:") or lower.startswith("done "):
-        prefix_len = 5 if lower.startswith("done:") else 5
-        return ("x", text[prefix_len:].strip())
+        return ("x", text[5:].strip())
 
     # Rule 4: exclamation mark
     if text.endswith("!") or text.startswith("!"):
@@ -49,7 +65,13 @@ def parse_quick_input(text: str) -> tuple[str, str]:
             cleaned = cleaned.replace(kw, "")
         return ("*", cleaned.strip())
 
-    # Rule 6: default
+    # Rule 6: priority prefix (p or priority, with space)
+    if lower.startswith("priority "):
+        return ("*", text[9:].strip())
+    if lower.startswith("p ") and not lower.startswith("pi"):  # not "pi" (privacy, etc)
+        return ("*", text[2:].strip())
+
+    # Rule 7: default (task)
     return ("t", text)
 
 

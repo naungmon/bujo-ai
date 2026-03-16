@@ -59,6 +59,30 @@ class TestParseQuickInput:
             "go to the store and buy some milk",
         )
 
+    # Rule 1: note prefix (space variant)
+    def test_note_space(self):
+        assert parse_quick_input("note feeling good") == ("n", "feeling good")
+
+    # Rule 2: event prefix (space variant)
+    def test_event_space(self):
+        assert parse_quick_input("event tomorrow at 3") == ("e", "tomorrow at 3")
+
+    # Rule 6: priority prefix
+    def test_priority_word(self):
+        assert parse_quick_input("priority finish report") == ("*", "finish report")
+
+    def test_priority_p_prefix(self):
+        assert parse_quick_input("p finish report") == ("*", "finish report")
+
+    # t/ as prefix is NOT special — falls through to default task
+    def test_task_word_is_default(self):
+        """'task' as prefix is NOT stripped — it's just a task."""
+        assert parse_quick_input("task call jackson") == ("t", "task call jackson")
+
+    def test_t_not_stripped(self):
+        """'t' as prefix falls through to default task."""
+        assert parse_quick_input("t buy milk") == ("t", "t buy milk")
+
     # Edge cases
     def test_empty_string(self):
         assert parse_quick_input("") == ("t", "")
