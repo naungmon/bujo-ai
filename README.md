@@ -14,7 +14,7 @@ For development (editable install):
 
 ```bash
 git clone https://github.com/naungmon/bujo-cli.git
-cd bujo-journal
+cd bujo-cli
 pip install -e .
 ```
 
@@ -83,7 +83,7 @@ The `bujo capture` command detects the symbol from your text:
 | `bujo capture "buy milk"` | · task |
 | `bujo capture "note: feeling good"` | – note |
 | `bujo capture "event: meeting at 3pm"` | ○ event |
-| `bujo capture "standup tomorrow"` | – note |
+| `bujo capture "standup tomorrow"` | · task |
 | `bujo capture "finish the report!"` | ★ priority |
 | `bujo capture "done: wrote tests"` | × done |
 | `bujo capture "fix bug important"` | ★ priority |
@@ -94,7 +94,7 @@ The TUI header adapts to your time of day and context:
 
 - **Morning** (05:00–11:59): Energetic, forward-looking
 - **Afternoon** (12:00–16:59): Grounded, progress-focused
-- **Evening** (17:00–20:59): Wind-down, reflective
+- **Evening** (17:00–21:59): Wind-down, reflective
 - **Late** (21:00–04:59): Calm, no pressure
 
 Streaks are acknowledged when 3+ days. Mondays prompt priority-setting.
@@ -131,7 +131,7 @@ productive time, and top insight.
 Capture entries from anywhere with `Win+Shift+B`:
 
 ```bash
-pip install bujo[hotkey]  # install keyboard dependency
+pip install bujo-journal[hotkey]  # install keyboard dependency
 bujo-capture              # start hotkey listener
 ```
 
