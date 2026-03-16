@@ -612,7 +612,9 @@ class DailyView(Screen):
 
     def _update_hint_bar(self) -> None:
         hint = self.query_one("#hint-bar", Static)
+        prompt = self.query_one("#input-prompt", Static)
         if self.nav_mode:
+            prompt.update("[dim]\u25b8[/dim]")
             hint.update(
                 "[dim italic][nav][/dim italic]  "
                 "[dim]\u2191\u2193 move[/dim]  "
@@ -623,6 +625,7 @@ class DailyView(Screen):
                 "[dim]Escape back[/dim]"
             )
         else:
+            prompt.update("[bold cyan]\u25b8[/bold cyan]")
             hint.update(
                 "[dim italic][input][/dim italic]  "
                 "[dim]Ctrl+B coach[/dim]  "
