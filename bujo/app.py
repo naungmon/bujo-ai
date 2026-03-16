@@ -11,7 +11,7 @@ from textual.binding import Binding
 from textual.containers import ScrollableContainer, Vertical
 from textual.reactive import reactive
 from textual.screen import Screen
-from textual.widgets import Footer, Header, Input, ListView, ListItem, Static
+from textual.widgets import Footer, Header, Input, ListView, ListItem, Static, TextArea
 from textual import events, on, work
 
 from bujo.models import LogReader, parse_entries
@@ -480,6 +480,7 @@ class DailyView(Screen):
     """Main daily log with always-on input bar."""
 
     nav_mode = reactive(False)
+    dump_mode = reactive(False)
 
     BINDINGS = [
         Binding("ctrl+b", "coach", "Coach"),
@@ -502,8 +503,14 @@ class DailyView(Screen):
             )
             yield Static("", id="inline-display")
             yield Static("", id="hint-bar")
+            # Normal input bar
             yield Static("\u25b8 ", id="input-prompt")
             yield Input(placeholder="", id="main-input")
+            # Dump mode (hidden initially)
+            yield Static(
+                "[dim italic]dump mode[/dim italic]", id="dump-label", display=False
+            )
+            yield TextArea(id="dump-input", display=False)
         yield Footer()
 
     def on_mount(self) -> None:
@@ -813,12 +820,135 @@ class DailyView(Screen):
         event.input.clear()
         self.refresh_log()
 
+    def _enter_dump_mode(self) -> None:
+        """Enter dump mode with multiline TextArea."""
+        self.dump_mode = True
+        # Hide normal input
+        try:
+            self.query_one("#main-input", Input).display = False
+            self.query_one("#input-prompt", Static).display = False
+        except Exception:
+            pass
+        # Show dump input area
+        try:
+            self.query_one("#dump-input", TextArea).display = True
+            self.query_one("#dump-label", Static).display = True
+            self.query_one("#dump-input", TextArea).focus()
+        except Exception:
+            pass
+        self.query_one("#hint-bar", Static).update(
+            "[dim italic][dump][/dim italic]  "
+            "[dim]Ctrl+Enter save[/dim]  "
+            "[dim]Escape cancel[/dim]"
+        )
+
+    def _exit_dump_mode(self) -> None:
+        """Exit dump mode, restore normal input."""
+        self.dump_mode = False
+        # Hide dump input
+        try:
+            self.query_one("#dump-input", TextArea).display = False
+            self.query_one("#dump-label", Static).display = False
+        except Exception:
+            pass
+        # Show normal input
+        try:
+            self.query_one("#main-input", Input).display = True
+            self.query_one("#input-prompt", Static).display = True
+            self._set_input_focus()
+        except Exception:
+            pass
+        self._update_hint_bar()
+
+    @work(thread=True)
+    def _submit_dump(self) -> None:
+        """Submit dump text for AI parsing."""
+        from bujo.ai import save_dump_and_parse, show_setup_instructions, get_ai_config
+        from bujo.app import SYMBOL_DISPLAY
+
+        try:
+            text_area = self.query_one("#dump-input", TextArea)
+            text = text_area.text
+        except Exception:
+            return
+
+        if not text.strip():
+            self.app.call_from_thread(self._exit_dump_mode)
+            return
+
+        # Show parsing indicator
+        self.app.call_from_thread(
+            lambda: self.query_one("#inline-display", Static).update(
+                "[dim italic]parsing...[/dim italic]"
+            )
+        )
+        self.app.call_from_thread(
+            lambda: self.query_one("#inline-display", Static).update("")
+        )
+
+        success, entries, err = save_dump_and_parse(text, VAULT)
+
+        if success:
+            # Show results briefly
+            type_map = {
+                "t": "task",
+                "n": "note",
+                "e": "event",
+                "*": "priority",
+                "x": "done",
+            }
+            lines = ["", f"[dim italic]parsed {len(entries)} entries:[/dim italic]", ""]
+            for sym, entry_text in entries:
+                d = SYMBOL_DISPLAY.get(sym, sym)
+                label = type_map.get(sym, sym)
+                lines.append(f"  {d} {entry_text}  [dim italic]{label}[/dim italic]")
+            inline_text = "\n".join(lines)
+
+            def show_result():
+                self._exit_dump_mode()
+                inline = self.query_one("#inline-display", Static)
+                inline.update(inline_text)
+                inline.display = True
+                self.refresh_log()
+
+            self.app.call_from_thread(show_result)
+        elif err == "no_key":
+
+            def show_key_error():
+                self._exit_dump_mode()
+                show_setup_instructions()
+
+            self.app.call_from_thread(show_key_error)
+        else:
+
+            def show_other_error():
+                self._exit_dump_mode()
+                inline = self.query_one("#inline-display", Static)
+                inline.update(
+                    f"[red]Error: {err}[/red]\n[dim italic]Draft saved in log. Try: bujo dump --retry[/dim italic]"
+                )
+                inline.display = True
+
+            self.app.call_from_thread(show_other_error)
+
     def on_key(self, event: events.Key) -> None:
         # Coach dismiss: any key (except ctrl+b) closes coach
         if self._current_coach_mode:
             if event.key != "ctrl+b":
                 self._close_coach()
                 event.stop()
+            return
+
+        # Dump mode: Ctrl+Enter (ctrl+j) to submit, Escape to cancel
+        if self.dump_mode:
+            if event.key == "escape":
+                self._exit_dump_mode()
+                event.stop()
+                return
+            if event.key == "ctrl+j":
+                self._submit_dump()
+                event.stop()
+                return
             return
 
         key = event.key

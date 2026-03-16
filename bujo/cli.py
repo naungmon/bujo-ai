@@ -72,6 +72,25 @@ def _print_coach_human(report: dict) -> None:
     print("\u2500" * 60)
 
 
+def _print_dump_entries(entries: list[tuple[str, str]]) -> None:
+    """Print parsed dump entries with Unicode symbols."""
+    from bujo.app import SYMBOL_DISPLAY, SYMBOLS
+
+    type_map = {
+        "t": "task",
+        "n": "note",
+        "e": "event",
+        "*": "priority",
+        "x": "done",
+        "k": "killed",
+        ">": "migrated",
+    }
+    for sym, text in entries:
+        d = SYMBOL_DISPLAY.get(sym, sym)
+        label = type_map.get(sym, sym)
+        print(f"  {d} {text}")
+
+
 def main() -> None:
     args = sys.argv[1:]
 
@@ -241,6 +260,79 @@ def main() -> None:
         from bujo.app import VAULT
 
         print(str(VAULT))
+
+    elif cmd == "dump":
+        from bujo.ai import save_dump_and_parse, show_setup_instructions
+        from bujo.app import SYMBOL_DISPLAY, ensure_vault, VAULT
+        import re
+
+        ensure_vault()
+        sys.stdout.reconfigure(encoding="utf-8")
+
+        # Check for --retry flag
+        if "--retry" in args:
+            from bujo.app import today_path, read_text_safe
+
+            p = today_path()
+            if not p.exists():
+                print("No log file for today.")
+                return
+            content = read_text_safe(p)
+            dump_blocks = re.findall(r"## dump\n(.*?)## /dump", content, re.DOTALL)
+            if not dump_blocks:
+                print("No unprocessed dump blocks found.")
+                return
+            print(f"Found {len(dump_blocks)} dump block(s) to re-parse...")
+            for raw_text in dump_blocks:
+                success, entries, err = save_dump_and_parse(raw_text, VAULT)
+                if success:
+                    _print_dump_entries(entries)
+                elif err == "no_key":
+                    show_setup_instructions()
+                else:
+                    print(f"  Error: {err}")
+                    print("  Draft saved in log. Try again after setting API key.")
+            return
+
+        # Get text from args or stdin
+        if len(args) >= 2:
+            text = " ".join(args[1:])
+        else:
+            # Multiline input mode
+            print(
+                "dump mode — type freely, submit with Ctrl+Z (Windows) or Ctrl+D (Mac/Linux)"
+            )
+            print("\u2500" * 50)
+            try:
+                lines = []
+                while True:
+                    line = input()
+                    lines.append(line)
+            except EOFError:
+                pass
+            text = "\n".join(lines)
+
+        if not text.strip():
+            print("Empty input. Nothing to parse.")
+            return
+
+        print("\nparsing...")
+        success, entries, err = save_dump_and_parse(text, VAULT)
+
+        if success:
+            print(f"\nparsed {len(entries)} entries:\n")
+            _print_dump_entries(entries)
+            from bujo.app import today_path
+
+            print(f"\nsaved to {today_path()}")
+        elif err == "no_key":
+            show_setup_instructions()
+            print("\nYour text has been saved as a draft in today's log.")
+            print("Set your API key and run: bujo dump --retry")
+        else:
+            print(f"\nError: {err}")
+            print("Your text has been saved as a draft in today's log.")
+            print("Set your API key and run: bujo dump --retry")
 
     else:
         print(f"Unknown command: {cmd}")

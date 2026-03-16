@@ -4,17 +4,51 @@ A CLI + TUI bullet journal built for ADHD-C brains. No habit trackers, no
 decorative spreads. Just capture, migrate, reflect. Data lives in plain
 markdown files — fully Obsidian-compatible.
 
+## bujo-ai
+
+This fork adds AI-powered dump capture. Type freely in one paragraph —
+AI parses it into structured BuJo entries automatically.
+
+### Requires
+
+An OpenRouter API key. Get one at openrouter.ai/keys
+
+### Setup (Windows)
+
+```
+$env:BUJO_AI_KEY="sk-or-your-key-here"
+```
+
+### Setup (Mac/Linux)
+
+```
+export BUJO_AI_KEY=sk-or-your-key-here
+```
+
+Default model: minimax/minimax-m2.5
+Override: set BUJO_AI_MODEL to any OpenRouter model string.
+
+### Usage
+
+```
+bujo dump "need to call jackson, feeling scattered, club tonight"
+bujo dump          ← multiline mode
+bujo dump --retry  ← re-parse saved drafts
+```
+
+Or press Ctrl+D inside the TUI to enter dump mode.
+
 ## Install
 
 ```bash
-pip install bujo-cli
+pip install bujo-ai
 ```
 
 For development (editable install):
 
 ```bash
-git clone https://github.com/naungmon/bujo-cli.git
-cd bujo-cli
+git clone https://github.com/naungmon/bujo-ai.git
+cd bujo-ai
 pip install -e .
 ```
 
@@ -110,6 +144,7 @@ They came back to update what happened. The app knows that.
 | `f` | FutureView | Parked items, not dead |
 | `M` | MigrationScreen | Review pending tasks |
 | `Ctrl+B` | Coach | Inline coaching (any key dismisses) |
+| `Ctrl+D` | Dump mode | AI-powered free-form capture |
 | `?` | HelpScreen | Keybinding reference |
 
 ## CLI Commands
@@ -127,6 +162,9 @@ They came back to update what happened. The app knows that.
 | `bujo streak` | Current streak count |
 | `bujo template morning` | Apply template |
 | `bujo vault` | Print vault path |
+| `bujo dump "text"` | AI parse dump and save |
+| `bujo dump` | Multiline dump mode |
+| `bujo dump --retry` | Re-parse saved drafts |
 
 ## Symbol System
 
