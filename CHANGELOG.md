@@ -13,7 +13,7 @@
 - Time-aware session greetings with streak and pending awareness
 - Analytics: momentum, kill themes, stuck tasks, priority alignment
 - Weekly summary with totals and insights
-- Global hotkey `Win+Shift+B` (`pip install bujo-journal[hotkey]`)
+- Global hotkey `Win+Shift+B` (`pip install bujo-cli[hotkey]`)
 - Obsidian frontmatter and dashboard integration (opt-in)
 - Claude Code and KiloCode slash command support
 - Legacy Unicode file backward compatibility

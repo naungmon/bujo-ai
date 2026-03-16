@@ -7,7 +7,7 @@ markdown files — fully Obsidian-compatible.
 ## Install
 
 ```bash
-pip install bujo-journal
+pip install bujo-cli
 ```
 
 For development (editable install):
@@ -131,7 +131,7 @@ productive time, and top insight.
 Capture entries from anywhere with `Win+Shift+B`:
 
 ```bash
-pip install bujo-journal[hotkey]  # install keyboard dependency
+pip install bujo-cli[hotkey]  # install keyboard dependency
 bujo-capture              # start hotkey listener
 ```
 
