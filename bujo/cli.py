@@ -272,26 +272,60 @@ def main() -> None:
         # Check for --retry flag
         if "--retry" in args:
             from bujo.app import today_path, read_text_safe
+            from bujo.models import parse_entries
 
             p = today_path()
             if not p.exists():
                 print("No log file for today.")
                 return
             content = read_text_safe(p)
-            dump_blocks = re.findall(r"## dump\n(.*?)## /dump", content, re.DOTALL)
-            if not dump_blocks:
+            # Find dump blocks that are NOT followed by structured entries
+            # A processed block has t/x/n/e/*/>/k lines right after ## /dump
+            unprocessed: list[str] = []
+            lines = content.split("\n")
+            i = 0
+            while i < len(lines):
+                if lines[i].strip() == "## dump":
+                    # Collect dump text until ## /dump
+                    dump_lines = []
+                    i += 1
+                    while i < len(lines) and lines[i].strip() != "## /dump":
+                        dump_lines.append(lines[i])
+                        i += 1
+                    i += 1  # skip ## /dump
+                    # Check if structured entries follow
+                    has_entries = False
+                    if i < len(lines):
+                        next_line = lines[i].strip()
+                        if next_line and next_line[0] in (
+                            "t",
+                            "x",
+                            "n",
+                            "e",
+                            "*",
+                            "k",
+                            ">",
+                        ):
+                            has_entries = True
+                    if not has_entries and dump_lines:
+                        unprocessed.append("\n".join(dump_lines))
+                else:
+                    i += 1
+
+            if not unprocessed:
                 print("No unprocessed dump blocks found.")
                 return
-            print(f"Found {len(dump_blocks)} dump block(s) to re-parse...")
-            for raw_text in dump_blocks:
-                success, entries, err = save_dump_and_parse(raw_text, VAULT)
+            print(f"Found {len(unprocessed)} unprocessed dump block(s) to re-parse...")
+            from bujo.ai import retry_parse
+
+            for raw_text in unprocessed:
+                success, entries, err = retry_parse(raw_text, VAULT)
                 if success:
                     _print_dump_entries(entries)
                 elif err == "no_key":
                     show_setup_instructions()
                 else:
                     print(f"  Error: {err}")
-                    print("  Draft saved in log. Try again after setting API key.")
             return
 
         # Get text from args or stdin
@@ -316,6 +350,25 @@ def main() -> None:
             print("Empty input. Nothing to parse.")
             return
 
+        # Save raw text first (nothing ever lost) — check key only for API call
+        from bujo.ai import get_ai_config
+
+        if get_ai_config() is None:
+            # Still save the raw text to vault
+            from bujo.app import today_path, today_log
+            from datetime import date
+
+            p = today_path()
+            if not p.exists():
+                today_log()
+            with open(p, "a", encoding="utf-8") as f:
+                f.write(f"\n## dump\n{text}\n## /dump\n")
+
+            show_setup_instructions()
+            print("\nYour text was saved as a draft in today's log.")
+            print("Set your API key and run: bujo dump --retry")
+            return
+
         print("\nparsing...")
         success, entries, err = save_dump_and_parse(text, VAULT)
 
@@ -326,12 +379,13 @@ def main() -> None:
 
             print(f"\nsaved to {today_path()}")
         elif err == "no_key":
+            print("\n")
             show_setup_instructions()
-            print("\nYour text has been saved as a draft in today's log.")
+            print("\nYour text was saved as a draft in today's log.")
             print("Set your API key and run: bujo dump --retry")
         else:
             print(f"\nError: {err}")
-            print("Your text has been saved as a draft in today's log.")
+            print("Your text was saved as a draft in today's log.")
             print("Set your API key and run: bujo dump --retry")
 
     else:

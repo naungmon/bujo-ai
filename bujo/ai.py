@@ -197,3 +197,28 @@ def save_dump_and_parse(
         append_entry(sym, entry_text)
 
     return (True, entries, "")
+
+
+def retry_parse(text: str, vault: Path) -> tuple[bool, list[tuple[str, str]], str]:
+    """Parse text with AI and append entries (without saving raw dump block).
+
+    Used by --retry which operates on already-saved dump blocks.
+    Returns (success, entries, error_message).
+    """
+    config = get_ai_config()
+    if config is None:
+        return (False, [], "no_key")
+
+    api_key, model = config
+
+    try:
+        entries = parse_dump(text, api_key, model)
+    except AIParseError as e:
+        return (False, [], f"parse_failed: {e.raw_response[:200]}")
+    except requests.RequestException as e:
+        return (False, [], f"network_error: {str(e)}")
+
+    for sym, entry_text in entries:
+        append_entry(sym, entry_text)
+
+    return (True, entries, "")
