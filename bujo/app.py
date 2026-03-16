@@ -949,6 +949,12 @@ class DailyView(Screen):
             self.app.call_from_thread(show_other_error)
 
     def on_key(self, event: events.Key) -> None:
+        import sys
+
+        print(
+            f"DEBUG on_key: key={event.key!r} char={event.character!r}", file=sys.stderr
+        )
+
         # Coach dismiss: any key (except ctrl+b) closes coach
         if self._current_coach_mode:
             if event.key != "ctrl+b":
