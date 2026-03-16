@@ -13,6 +13,8 @@ from textual.binding import Binding
 from textual import events, on, work
 from datetime import date
 
+from bujo.models import parse_entries
+
 VAULT = Path(os.environ.get("BUJO_VAULT", Path.home() / "bujo-vault"))
 DAILY = VAULT / "daily"
 FUTURE = VAULT / "future"
@@ -37,6 +39,16 @@ SYMBOL_DISPLAY = {
     "n": "\u2013",  # – note
     "e": "\u25cb",  # ○ event
     "*": "\u2605",  # ★ priority
+}
+
+COLOR_MAP = {
+    "t": "cyan",
+    "x": "green",
+    ">": "blue",
+    "k": "dim",
+    "n": "yellow",
+    "e": "magenta",
+    "*": "red",
 }
 
 
@@ -96,43 +108,6 @@ def append_entry(symbol: str, text: str) -> None:
         f.write(f"{symbol} {text}\n")
 
 
-def parse_entries(content: str) -> list[dict]:
-    """Parse log content into a list of entry dicts.
-
-    Handles both ASCII format (t, x, >, k, n, e, *)
-    and legacy Unicode (·, ×, >, ~, –, ○, ★).
-    """
-    entries: list[dict] = []
-
-    # Build prefix -> symbol mapping for both ASCII and Unicode
-    prefix_to_sym: dict[str, str] = {}
-    for sym in SYMBOLS:
-        prefix_to_sym[sym] = sym
-    for display, sym in SYMBOL_DISPLAY.items():
-        prefix_to_sym[display] = sym
-
-    for line in content.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        for prefix, sym in prefix_to_sym.items():
-            if stripped.startswith(prefix + " "):
-                text = stripped[len(prefix) + 1 :].strip()
-                name, _ = SYMBOLS.get(sym, ("Unknown", ""))
-                display = SYMBOL_DISPLAY.get(sym, prefix)
-                entries.append(
-                    {
-                        "symbol": sym,
-                        "display": display,
-                        "text": text,
-                        "type": name,
-                        "raw": stripped,
-                    }
-                )
-                break
-    return entries
-
-
 def get_monthly_path() -> Path:
     """Return path to current month's file."""
     return MONTHLY / f"{date.today().strftime('%Y-%m')}.md"
@@ -170,6 +145,15 @@ def get_all_logs_summary() -> str:
     return "\n".join(lines)
 
 
+def _entry_display(entry: dict) -> str:
+    """Format an entry dict as markup string for ListView."""
+    sym = entry.get("display", "")
+    text = entry.get("text", "")
+    etype = entry.get("type", "")
+    color = COLOR_MAP.get(entry.get("symbol", ""), "white")
+    return f"[bold {color}]{sym}[/bold {color}]  [white]{text}[/white]  [dim italic]{etype}[/dim italic]"
+
+
 class EntryItem(ListItem):
     """A single entry in a ListView."""
 
@@ -179,22 +163,7 @@ class EntryItem(ListItem):
         self.index = index
 
     def compose(self) -> ComposeResult:
-        sym = self.entry["display"]
-        text = self.entry["text"]
-        etype = self.entry["type"]
-        color_map = {
-            "t": "cyan",
-            "x": "green",
-            ">": "blue",
-            "k": "dim",
-            "n": "yellow",
-            "e": "magenta",
-            "*": "red",
-        }
-        color = color_map.get(self.entry["symbol"], "white")
-        yield Static(
-            f"[bold {color}]{sym}[/bold {color}]  [white]{text}[/white]  [dim]{etype}[/dim]"
-        )
+        yield Static(_entry_display(self.entry))
 
 
 class HelpScreen(ModalScreen):
@@ -244,8 +213,12 @@ class QuickEntryScreen(ModalScreen):
 
     def compose(self) -> ComposeResult:
         display = SYMBOL_DISPLAY.get(self.symbol, self.symbol)
+        color = COLOR_MAP.get(self.symbol, "white")
         with Container(id="entry-box"):
-            yield Static(f"[bold]{display} New {self.symbol_name}[/bold]", markup=True)
+            yield Static(
+                f"[bold {color}]{display}[/bold {color}] {self.symbol_name}",
+                markup=True,
+            )
             yield Input(placeholder="What's on your mind...", id="entry-input")
             yield Static(
                 "[dim]Enter to save \u00b7 Escape to cancel[/dim]", markup=True
@@ -271,6 +244,9 @@ class AddEntryScreen(ModalScreen):
 
     def compose(self) -> ComposeResult:
         with Container(id="add-box"):
+            yield Static(
+                "[dim]type freely \u00b7 symbol auto-detected[/dim]", markup=True
+            )
             yield Input(placeholder="what's on your mind...", id="add-input")
             yield Static("", id="detected-type")
             yield Static(
@@ -278,7 +254,7 @@ class AddEntryScreen(ModalScreen):
                 markup=True,
                 id="override-hints",
             )
-            yield Static("[dim]Enter save · Escape cancel[/dim]", markup=True)
+            yield Static("[dim]Enter save \u00b7 Escape cancel[/dim]", markup=True)
 
     def on_mount(self) -> None:
         from bujo.capture import detect_type
@@ -286,6 +262,7 @@ class AddEntryScreen(ModalScreen):
         self.detected_symbol = "t"
         self.override = None
         self.query_one("#add-input").focus()
+        self._update_label()
 
     @on(Input.Changed)
     def on_input_changed(self, event: Input.Changed) -> None:
@@ -300,16 +277,7 @@ class AddEntryScreen(ModalScreen):
         sym = self.override or self.detected_symbol
         display = SYMBOL_DISPLAY.get(sym, sym)
         name = SYMBOLS.get(sym, ("Unknown", ""))[0]
-        color_map = {
-            "t": "cyan",
-            "x": "green",
-            ">": "blue",
-            "k": "dim",
-            "n": "yellow",
-            "e": "magenta",
-            "*": "red",
-        }
-        color = color_map.get(sym, "white")
+        color = COLOR_MAP.get(sym, "white")
         self.query_one("#detected-type", Static).update(
             f"[bold {color}]{display} {name}[/bold {color}]"
         )
@@ -377,11 +345,19 @@ class MigrationScreen(Screen):
                 content = read_text_safe(f)
             except (OSError, PermissionError):
                 continue
-            entries = parse_entries(content)
+            entries = parse_entries(content, f, date.today())
             for e in entries:
-                if e["symbol"] == "t":
-                    e["source_file"] = f
-                    self.pending.append(e)
+                if e.symbol == "t":
+                    self.pending.append(
+                        {
+                            "symbol": e.symbol,
+                            "display": e.display,
+                            "text": e.text,
+                            "type": e.type,
+                            "raw": e.raw,
+                            "source_file": f,
+                        }
+                    )
 
         if not self.pending:
             self.query_one("#mig-question", Static).update(
@@ -405,7 +381,7 @@ class MigrationScreen(Screen):
         self._act_on_selected(">")
 
     def action_kill(self) -> None:
-        self._act_on_selected("~")
+        self._act_on_selected("k")
 
     def action_to_future(self) -> None:
         lv = self.query_one("#mig-list", ListView)
@@ -485,11 +461,15 @@ class DailyView(Screen):
             yield Static("", id="date-label")
             yield Static("", id="entry-count")
             yield ScrollableContainer(
+                Static(
+                    "[dim italic]Press a to add \u00b7 type naturally \u00b7 auto-detects symbol[/dim italic]",
+                    id="empty-hint",
+                ),
                 ListView(id="entry-list"),
                 id="entry-scroll",
             )
             yield Static(
-                "[dim]a[/dim] add   [dim]select + t x > k n e *[/dim] retype   [dim]? help[/dim]",
+                "[dim]a add  t x > k n e * retype  ? help[/dim]",
                 markup=True,
                 id="hints",
             )
@@ -503,38 +483,50 @@ class DailyView(Screen):
         from bujo.analytics import InsightsEngine
 
         content = today_log()
-        entries = parse_entries(content)
-        done = sum(1 for e in entries if e["symbol"] == "x")
-        pending = sum(1 for e in entries if e["symbol"] == "t")
-        priority = sum(1 for e in entries if e["symbol"] == "*")
+        entries = parse_entries(content, today_path(), date.today())
+
+        done = sum(1 for e in entries if e.symbol == "x")
+        pending = sum(1 for e in entries if e.symbol == "t")
+        priority = sum(1 for e in entries if e.symbol == "*")
 
         engine = InsightsEngine(VAULT)
         s = engine.streak()
 
         greeting = session_greeting(streak=s, pending_count=pending)
         self.query_one("#date-label", Static).update(f"[bold]{greeting}[/bold]")
+
         lv = self.query_one("#entry-list", ListView)
         lv.clear()
 
+        empty_hint = self.query_one("#empty-hint", Static)
+
         if not entries:
+            empty_hint.display = True
+            lv.display = False
             self.query_one("#entry-count", Static).update(
-                "[dim]No entries yet today[/dim]"
-            )
-            self.query_one("#entry-list", ListView).mount(
-                Static(
-                    "[dim]Press a to add \u00b7 type naturally \u00b7 auto-detects symbol[/dim]"
-                )
+                "[dim italic]No entries yet[/dim italic]"
             )
             return
 
-        for i, e in enumerate(entries):
-            lv.append(EntryItem(e, i))
+        empty_hint.display = False
+        lv.display = True
 
-        done = sum(1 for e in entries if e["symbol"] == "x")
-        pending = sum(1 for e in entries if e["symbol"] == "t")
-        priority = sum(1 for e in entries if e["symbol"] == "*")
+        for i, e in enumerate(entries):
+            lv.append(
+                EntryItem(
+                    {
+                        "symbol": e.symbol,
+                        "display": e.display,
+                        "text": e.text,
+                        "type": e.type,
+                        "raw": e.raw,
+                    },
+                    i,
+                )
+            )
+
         self.query_one("#entry-count", Static).update(
-            f"[green]{done} done[/green]  [cyan]{pending} pending[/cyan]  [red]{priority} priority[/red]"
+            f"[green]{done} done[/green]  [dim]·[/dim]  [cyan]{pending} pending[/cyan]  [dim]·[/dim]  [red]{priority} priority[/red]"
         )
 
     @work(thread=True)
@@ -549,13 +541,13 @@ class DailyView(Screen):
         if lv.highlighted_child is None:
             return
         idx = lv.index
-        entries = parse_entries(today_log())
+        entries = parse_entries(today_log(), today_path(), date.today())
         if idx is None or idx >= len(entries):
             return
         entry = entries[idx]
         content = today_log()
-        new_line = f"{new_symbol} {entry['text']}"
-        content = content.replace(entry["raw"], new_line, 1)
+        new_line = f"{new_symbol} {entry.text}"
+        content = content.replace(entry.raw, new_line, 1)
         save_today(content)
         self.refresh_log()
 
@@ -611,6 +603,9 @@ class QuickCaptureScreen(ModalScreen):
 
     def compose(self) -> ComposeResult:
         with Container(id="add-box"):
+            yield Static(
+                "[dim]type freely \u00b7 symbol auto-detected[/dim]", markup=True
+            )
             yield Input(placeholder="Capture anything...", id="add-input")
             yield Static("", id="detected-type")
             yield Static(
@@ -618,12 +613,13 @@ class QuickCaptureScreen(ModalScreen):
                 markup=True,
                 id="override-hints",
             )
-            yield Static("[dim]Enter save · Escape cancel[/dim]", markup=True)
+            yield Static("[dim]Enter save \u00b7 Escape cancel[/dim]", markup=True)
 
     def on_mount(self) -> None:
         self.detected_symbol = "t"
         self.override = None
         self.query_one("#add-input").focus()
+        self._update_label()
 
     @on(Input.Changed)
     def on_input_changed(self, event: Input.Changed) -> None:
@@ -638,16 +634,7 @@ class QuickCaptureScreen(ModalScreen):
         sym = self.override or self.detected_symbol
         display = SYMBOL_DISPLAY.get(sym, sym)
         name = SYMBOLS.get(sym, ("Unknown", ""))[0]
-        color_map = {
-            "t": "cyan",
-            "x": "green",
-            ">": "blue",
-            "k": "dim",
-            "n": "yellow",
-            "e": "magenta",
-            "*": "red",
-        }
-        color = color_map.get(sym, "white")
+        color = COLOR_MAP.get(sym, "white")
         self.query_one("#detected-type", Static).update(
             f"[bold {color}]{display} {name}[/bold {color}]"
         )
@@ -686,7 +673,7 @@ class InsightsView(Screen):
                 Static("", id="insights-content"),
                 id="insights-scroll",
             )
-            yield Static("[dim]q back[/dim]", markup=True)
+            yield Static("[dim italic]q back[/dim italic]", markup=True)
         yield Footer()
 
     def on_mount(self) -> None:
@@ -700,9 +687,9 @@ class InsightsView(Screen):
 
         if report["empty"]:
             self.query_one("#insights-content", Static).update(
-                "[dim]Not enough data yet.\n"
+                "[dim italic]Not enough data yet.\n"
                 "Keep logging for a few days and patterns will appear.\n\n"
-                "Try: bujo template morning[/dim]"
+                "Try: bujo template morning[/dim italic]"
             )
             return
 
@@ -722,7 +709,7 @@ class InsightsView(Screen):
 
         lines = [
             f"Momentum    {momentum_bar}",
-            f"Streak      \U0001f525 {streak} day{'s' if streak != 1 else ''}",
+            f"Streak      {streak} day{'s' if streak != 1 else ''}",
             f"This week   {completion:.0%} completion",
             f"Priorities  {alignment:.0%} aligned",
             "",
@@ -730,20 +717,22 @@ class InsightsView(Screen):
 
         stuck = report["stuck_tasks"]
         if stuck:
-            lines.append("[bold]-- Stuck tasks --[/bold]")
+            lines.append("[dim italic]-- Stuck tasks --[/dim italic]")
             for t in stuck[:3]:
-                lines.append(f"  \u00b7 {t['text']}  ({t['count']}x)")
+                lines.append(
+                    f"  [red]\u00b7[/red] {t['text']}  [dim]({t['count']}x)[/dim]"
+                )
             lines.append("")
 
         themes = report["kill_themes"]
         if themes:
-            lines.append("[bold]-- You tend to drop --[/bold]")
-            theme_str = "  ".join(f"{k} ({v})" for k, v in list(themes.items())[:3])
-            lines.append(f"  {theme_str}")
+            lines.append("[dim italic]-- You tend to drop --[/dim italic]")
+            for k, v in list(themes.items())[:3]:
+                lines.append(f"  {k} [dim]({v})[/dim]")
             lines.append("")
 
-        lines.append("[bold]-- Today's nudge --[/bold]")
-        lines.append(f"[italic]{nudge}[/italic]")
+        lines.append("[dim italic]-- Today's nudge --[/dim italic]")
+        lines.append(f"{nudge}")
 
         self.query_one("#insights-content", Static).update("\n".join(lines))
 
@@ -872,7 +861,8 @@ class ReflectionView(Screen):
         files = sorted(REFLECTIONS.glob("*.md"), reverse=True)
         if not files:
             self.query_one("#reflection-content", Static).update(
-                "[dim]No reflections yet. These are your starred (\u2013) entries worth keeping.\nPaste insights from your daily logs here.[/dim]"
+                "[dim italic]No reflections yet. These are your starred entries worth keeping.\n"
+                "Paste insights from your daily logs here.[/dim italic]"
             )
             return
         contents: list[str] = []
@@ -901,7 +891,6 @@ class BuJoApp(App):
 
     CSS_PATH = "app.tcss"
     TITLE = "BuJo"
-    SUB_TITLE = "ADHD-first bullet journal"
     BINDINGS = [
         Binding("ctrl+c", "quit", "Quit"),
         Binding("d", "daily", "Daily"),

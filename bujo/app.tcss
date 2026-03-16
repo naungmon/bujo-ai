@@ -1,32 +1,40 @@
-/* BuJo Textual CSS */
+/* BuJo Textual CSS — no borders, clean notepad feel */
+
+/* ── Screens ────────────────────────────────────────── */
 
 Screen {
-    background: $background;
-}
-
-#help-box {
-    width: 50;
-    height: auto;
-    max-height: 80%;
-    background: $background 80%;
-    border: tall $primary-darken-2;
     padding: 1 2;
-    align: center middle;
 }
 
-#entry-box {
-    width: 60;
-    height: auto;
-    background: $background 80%;
-    border: tall $primary-darken-2;
-    padding: 1 2;
-    align: center middle;
-}
+/* ── DailyView ──────────────────────────────────────── */
 
-#migration-container {
+#daily-layout {
     height: 100%;
-    padding: 1;
 }
+
+#date-label {
+    padding: 1 0 0 0;
+}
+
+#entry-count {
+    padding: 0 0 1 0;
+}
+
+#entry-scroll {
+    height: 1fr;
+}
+
+#empty-hint {
+    height: 100%;
+    content-align: center middle;
+    padding: 2;
+}
+
+#hints {
+    padding: 1 0 0 0;
+}
+
+/* ── ListView ───────────────────────────────────────── */
 
 ListView {
     height: 1fr;
@@ -38,13 +46,41 @@ ListView ListItem {
 }
 
 ListView ListItem.--highlight {
-    background: $primary 20%;
-    border-left: thick $primary;
+    background: $primary 15%;
 }
 
-#daily-layout {
-    height: 100%;
+/* ── Modals (no boxes) ──────────────────────────────── */
+
+#help-box {
+    width: 50;
+    height: auto;
+    max-height: 80%;
+    padding: 1 2;
+    align: center middle;
 }
+
+#entry-box {
+    width: 60;
+    height: auto;
+    padding: 1 2;
+    align: center middle;
+}
+
+#add-box {
+    width: 60;
+    height: auto;
+    padding: 1 2;
+    align: center middle;
+}
+
+/* ── Migration ──────────────────────────────────────── */
+
+#migration-container {
+    height: 100%;
+    padding: 0;
+}
+
+/* ── Other screens ──────────────────────────────────── */
 
 #monthly-layout {
     height: 100%;
@@ -58,14 +94,28 @@ ListView ListItem.--highlight {
     height: 100%;
 }
 
-ScrollableContainer {
-    border: tall $primary-darken-2;
+#insights-layout {
+    height: 100%;
 }
 
-#hints {
-    padding: 1 0;
+#insights-scroll {
+    height: 1fr;
 }
+
+#monthly-scroll {
+    height: 1fr;
+}
+
+#future-scroll {
+    height: 1fr;
+}
+
+#reflection-scroll {
+    height: 1fr;
+}
+
+/* ── Hints / footers ────────────────────────────────── */
 
 #m-hints {
-    padding: 1 0;
+    padding: 1 0 0 0;
 }
