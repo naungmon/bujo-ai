@@ -516,6 +516,8 @@ class DailyView(Screen):
     def on_mount(self) -> None:
         self._current_coach_mode = False
         self.refresh_log()
+        # Ensure input has focus after layout settles
+        self.set_timer(0.05, lambda: self.query_one("#main-input", Input).focus())
 
     def refresh_log(self) -> None:
         from bujo.analytics import InsightsEngine
@@ -555,7 +557,7 @@ class DailyView(Screen):
             )
             # Session detection: empty → input mode
             self.nav_mode = False
-            self._set_input_focus()
+            self.set_timer(0.05, lambda: self._set_input_focus())
         else:
             empty_hint.display = False
             lv.display = True
@@ -579,7 +581,7 @@ class DailyView(Screen):
             )
             # Session detection: entries exist → nav mode
             self.nav_mode = True
-            self._set_nav_focus_last()
+            self.set_timer(0.05, lambda: self._set_nav_focus_last())
 
         # First-run check
         if not FIRST_RUN_FLAG.exists() and not has_any_daily_files():
@@ -855,7 +857,7 @@ class DailyView(Screen):
         try:
             self.query_one("#main-input", Input).display = True
             self.query_one("#input-prompt", Static).display = True
-            self._set_input_focus()
+            self.set_timer(0.05, lambda: self._set_input_focus())
         except Exception:
             pass
         self._update_hint_bar()
@@ -957,12 +959,12 @@ class DailyView(Screen):
         if key == "escape":
             if self.nav_mode:
                 self.nav_mode = False
-                self._set_input_focus()
+                self.set_timer(0.01, lambda: self._set_input_focus())
             else:
                 entries = parse_entries(today_log(), today_path(), date.today())
                 if entries:
                     self.nav_mode = True
-                    self._set_nav_focus_last()
+                    self.set_timer(0.01, lambda: self._set_nav_focus_last())
             event.stop()
             return
 
@@ -1005,7 +1007,7 @@ class DailyView(Screen):
                 inp = self.query_one("#main-input", Input)
                 inp.value = entry["text"]
                 self.nav_mode = False
-                inp.focus()
+                self.set_timer(0.01, lambda: inp.focus())
             event.stop()
         elif key == "m":
             self.app.push_screen(MonthlyView())
@@ -1025,7 +1027,7 @@ class DailyView(Screen):
         elif key in ("t", "n", "e", "star", "p"):
             # Prefix key typed in nav mode — switch to input, let key fall through
             self.nav_mode = False
-            self._set_input_focus()
+            self.set_timer(0.01, lambda: self._set_input_focus())
             # Don't stop event — let it reach the Input widget
 
 
