@@ -1,0 +1,71 @@
+/* BuJo Textual CSS */
+
+Screen {
+    background: $background;
+}
+
+#help-box {
+    width: 50;
+    height: auto;
+    max-height: 80%;
+    background: $background 80%;
+    border: tall $primary-darken-2;
+    padding: 1 2;
+    align: center middle;
+}
+
+#entry-box {
+    width: 60;
+    height: auto;
+    background: $background 80%;
+    border: tall $primary-darken-2;
+    padding: 1 2;
+    align: center middle;
+}
+
+#migration-container {
+    height: 100%;
+    padding: 1;
+}
+
+ListView {
+    height: 1fr;
+}
+
+ListView ListItem {
+    height: 1;
+    padding: 0 1;
+}
+
+ListView ListItem.--highlight {
+    background: $primary 20%;
+    border-left: thick $primary;
+}
+
+#daily-layout {
+    height: 100%;
+}
+
+#monthly-layout {
+    height: 100%;
+}
+
+#future-layout {
+    height: 100%;
+}
+
+#reflection-layout {
+    height: 100%;
+}
+
+ScrollableContainer {
+    border: tall $primary-darken-2;
+}
+
+#hints {
+    padding: 1 0;
+}
+
+#m-hints {
+    padding: 1 0;
+}

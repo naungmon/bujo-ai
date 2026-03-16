@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bujo-journal"
+version = "3.0.0"
+description = "ADHD-first bullet journal. CLI + TUI. Obsidian-compatible."
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+keywords = ["bullet journal", "adhd", "cli", "tui", "productivity", "obsidian"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Environment :: Console",
+]
+dependencies = [
+    "textual>=0.47.0,<1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+hotkey = ["keyboard>=0.13.5"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[project.scripts]
+bujo = "bujo.cli:main"
+bujo-capture = "bujo.capture_hotkey:main"
+
+[tool.setuptools.packages.find]
+include = ["bujo*"]
