@@ -4,6 +4,12 @@ Screen {
     background: $background;
 }
 
+/* ── Main layout ───────────────────────────────────── */
+
+#daily-layout {
+    height: 100%;
+}
+
 /* ── Header area ───────────────────────────────────── */
 
 #date-label {
@@ -35,6 +41,7 @@ Screen {
 
 #entry-scroll {
     height: 1fr;
+    min-height: 0;
     padding: 0 2;
 }
 
@@ -84,18 +91,22 @@ ListView:focus > ListItem.--highlight {
 
 /* ── Input area ────────────────────────────────────── */
 
+#input-row {
+    height: 3;
+}
+
 #input-prompt {
     height: 1;
     color: $primary;
     text-style: bold;
-    padding: 0 2 1 2;
+    padding: 0 2;
 }
 
 #main-input {
-    height: 1;
-    border: none;
-    background: transparent;
-    padding: 0 2 1 2;
+    height: 3;
+    border: tall $primary-darken-3;
+    background: $surface;
+    padding: 0 2;
     color: $text;
 }
 
