@@ -1,121 +1,145 @@
-/* BuJo Textual CSS — no borders, clean notepad feel */
-
-/* ── Screens ────────────────────────────────────────── */
+/* BuJo Textual CSS — borderless, clean notepad */
 
 Screen {
-    padding: 1 2;
+    background: $background;
 }
 
-/* ── DailyView ──────────────────────────────────────── */
-
-#daily-layout {
-    height: 100%;
-}
+/* ── Header area ───────────────────────────────────── */
 
 #date-label {
-    padding: 1 0 0 0;
+    height: 1;
+    color: $text;
+    text-style: bold;
+    padding: 1 2 0 2;
 }
 
-#entry-count {
-    padding: 0 0 1 0;
+#greeting-label {
+    height: auto;
+    color: $text-muted;
+    padding: 0 2;
 }
+
+#count-label {
+    height: 1;
+    color: $text-disabled;
+    padding: 0 2 1 2;
+}
+
+#separator {
+    height: 1;
+    color: $primary-darken-3;
+    padding: 0 2;
+}
+
+/* ── Entry list ────────────────────────────────────── */
 
 #entry-scroll {
     height: 1fr;
+    padding: 0 2;
 }
+
+#entry-list {
+    height: auto;
+    background: transparent;
+}
+
+ListView > ListItem {
+    height: 1;
+    background: transparent;
+    padding: 0 0;
+}
+
+ListView > ListItem.--highlight {
+    background: $primary-darken-3;
+}
+
+ListView:focus > ListItem.--highlight {
+    background: $primary-darken-2;
+}
+
+/* ── Empty state ───────────────────────────────────── */
 
 #empty-hint {
-    height: 100%;
-    content-align: center middle;
-    padding: 2;
-}
-
-#hints {
-    padding: 1 0 0 0;
-}
-
-/* ── ListView ───────────────────────────────────────── */
-
-ListView {
     height: 1fr;
+    align: center middle;
+    color: $text-disabled;
 }
 
-ListView ListItem {
+/* ── Inline coach display ──────────────────────────── */
+
+#inline-display {
+    height: 1fr;
+    padding: 1 2;
+    color: $text;
+    overflow-y: auto;
+}
+
+/* ── Hint bar ──────────────────────────────────────── */
+
+#hint-bar {
     height: 1;
-    padding: 0 1;
+    color: $text-disabled;
+    padding: 1 2 0 2;
 }
 
-ListView ListItem.--highlight {
-    background: $primary 15%;
+/* ── Input area ────────────────────────────────────── */
+
+#input-prompt {
+    height: 1;
+    color: $primary;
+    text-style: bold;
+    padding: 0 2 1 2;
 }
 
-/* ── Modals (no boxes) ──────────────────────────────── */
+#main-input {
+    height: 1;
+    border: none;
+    background: transparent;
+    padding: 0 2 1 2;
+    color: $text;
+}
 
-#help-box {
-    width: 50;
-    height: auto;
-    max-height: 80%;
+/* ── Secondary screens ─────────────────────────────── */
+
+#secondary-layout {
     padding: 1 2;
-    align: center middle;
-}
-
-#entry-box {
-    width: 60;
-    height: auto;
-    padding: 1 2;
-    align: center middle;
-}
-
-#add-box {
-    width: 60;
-    height: auto;
-    padding: 1 2;
-    align: center middle;
-}
-
-/* ── Migration ──────────────────────────────────────── */
-
-#migration-container {
-    height: 100%;
-    padding: 0;
-}
-
-/* ── Other screens ──────────────────────────────────── */
-
-#monthly-layout {
     height: 100%;
 }
 
-#future-layout {
-    height: 100%;
+#secondary-title {
+    height: 1;
+    color: $text;
+    text-style: bold;
+    margin-bottom: 1;
 }
 
-#reflection-layout {
-    height: 100%;
+#secondary-separator {
+    height: 1;
+    color: $primary-darken-3;
+    margin-bottom: 1;
 }
 
-#insights-layout {
-    height: 100%;
+#secondary-content {
+    height: 1fr;
+    color: $text-muted;
 }
 
-#insights-scroll {
+#secondary-scroll {
     height: 1fr;
 }
 
-#monthly-scroll {
-    height: 1fr;
+#secondary-hints {
+    height: 1;
+    color: $text-disabled;
+    margin-top: 1;
 }
 
-#future-scroll {
-    height: 1fr;
+#mig-status {
+    height: 1;
+    color: $text-disabled;
+    margin-bottom: 1;
 }
 
-#reflection-scroll {
+#mig-list {
     height: 1fr;
-}
-
-/* ── Hints / footers ────────────────────────────────── */
-
-#m-hints {
-    padding: 1 0 0 0;
 }

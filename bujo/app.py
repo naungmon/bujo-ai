@@ -1,25 +1,27 @@
-"""BuJo Textual TUI application."""
+"""BuJo Textual TUI application — redesigned interaction model."""
 
-import sys
 import os
 import subprocess
+import sys
+from datetime import date
 from pathlib import Path
 
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Static, Input, ListView, ListItem
-from textual.containers import Container, Vertical, ScrollableContainer
-from textual.screen import Screen, ModalScreen
 from textual.binding import Binding
+from textual.containers import ScrollableContainer, Vertical
+from textual.reactive import reactive
+from textual.screen import Screen
+from textual.widgets import Footer, Header, Input, ListView, ListItem, Static
 from textual import events, on, work
-from datetime import date
 
-from bujo.models import parse_entries
+from bujo.models import LogReader, parse_entries
 
 VAULT = Path(os.environ.get("BUJO_VAULT", Path.home() / "bujo-vault"))
 DAILY = VAULT / "daily"
 FUTURE = VAULT / "future"
 MONTHLY = VAULT / "monthly"
 REFLECTIONS = VAULT / "reflections"
+FIRST_RUN_FLAG = Path.home() / ".bujo-first-run-done"
 
 SYMBOLS = {
     "t": ("Task", "Something to do"),
@@ -32,28 +34,30 @@ SYMBOLS = {
 }
 
 SYMBOL_DISPLAY = {
-    "t": "\u00b7",  # · task
-    "x": "\u00d7",  # × done
-    ">": ">",  # > migrated
-    "k": "~",  # ~ killed
-    "n": "\u2013",  # – note
-    "e": "\u25cb",  # ○ event
-    "*": "\u2605",  # ★ priority
+    "t": "\u00b7",
+    "x": "\u00d7",
+    ">": ">",
+    "k": "~",
+    "n": "\u2013",
+    "e": "\u25cb",
+    "*": "\u2605",
 }
 
-COLOR_MAP = {
+SYMBOL_COLORS = {
     "t": "cyan",
     "x": "green",
     ">": "blue",
     "k": "dim",
-    "n": "yellow",
+    "n": "white",
     "e": "magenta",
     "*": "red",
 }
 
+# Navigation action symbols
+NAV_ACTIONS = {"x": "x", "k": "k", ">": ">"}
+
 
 def open_in_editor(path: Path | str) -> None:
-    """Open a file in the user's preferred editor, cross-platform."""
     editor = os.environ.get("EDITOR") or os.environ.get("VISUAL")
     if not editor:
         editor = "notepad" if sys.platform == "win32" else "nano"
@@ -64,18 +68,15 @@ def open_in_editor(path: Path | str) -> None:
 
 
 def ensure_vault() -> None:
-    """Create vault directories if they don't exist."""
     for d in [DAILY, FUTURE, MONTHLY, REFLECTIONS]:
         d.mkdir(parents=True, exist_ok=True)
 
 
 def today_path() -> Path:
-    """Return path to today's daily log file."""
     return DAILY / f"{date.today().isoformat()}.md"
 
 
 def read_text_safe(path: Path) -> str:
-    """Read text file with UTF-8, falling back to cp1252 for legacy files."""
     try:
         return path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
@@ -83,7 +84,6 @@ def read_text_safe(path: Path) -> str:
 
 
 def today_log() -> str:
-    """Read today's log, creating it if needed."""
     p = today_path()
     if not p.exists():
         header = f"# {date.today().strftime('%A, %B %d %Y')}\n\n"
@@ -92,30 +92,29 @@ def today_log() -> str:
 
 
 def save_today(content: str) -> None:
-    """Write content to today's log file."""
     today_path().write_text(content, encoding="utf-8")
 
 
 def append_entry(symbol: str, text: str) -> None:
-    """Append a new entry to today's log.
-
-    Writes ASCII symbol to file (t, x, >, k, n, e, *).
-    """
     p = today_path()
     if not p.exists():
-        today_log()  # creates the file with header
+        today_log()
     with open(p, "a", encoding="utf-8") as f:
         f.write(f"{symbol} {text}\n")
 
 
 def get_monthly_path() -> Path:
-    """Return path to current month's file."""
     return MONTHLY / f"{date.today().strftime('%Y-%m')}.md"
 
 
 def get_future_path() -> Path:
-    """Return path to future log."""
     return FUTURE / "future.md"
+
+
+def has_any_daily_files() -> bool:
+    if not DAILY.exists():
+        return False
+    return any(DAILY.glob("*.md"))
 
 
 def get_all_logs_summary() -> str:
@@ -145,192 +144,184 @@ def get_all_logs_summary() -> str:
     return "\n".join(lines)
 
 
-def _entry_display(entry: dict) -> str:
-    """Format an entry dict as markup string for ListView."""
-    sym = entry.get("display", "")
-    text = entry.get("text", "")
-    etype = entry.get("type", "")
-    color = COLOR_MAP.get(entry.get("symbol", ""), "white")
-    return f"[bold {color}]{sym}[/bold {color}]  [white]{text}[/white]  [dim italic]{etype}[/dim italic]"
+def _format_entry(e) -> str:
+    """Format an Entry object or dict as markup for ListView."""
+    if hasattr(e, "symbol"):
+        sym = e.symbol
+        display = e.display
+        text = e.text
+        etype = e.type
+    else:
+        sym = e.get("symbol", "")
+        display = e.get("display", "")
+        text = e.get("text", "")
+        etype = e.get("type", "")
+
+    color = SYMBOL_COLORS.get(sym, "white")
+    if sym == "x":
+        return f"[{color} dim]{display}[/] [dim]{text}[/]  [dim italic]{etype}[/]"
+    elif sym == "k":
+        return f"[dim]{display}[/] [dim]{text}[/]  [dim italic]{etype}[/]"
+    else:
+        return f"[{color}]{display}[/] [white]{text}[/]  [dim italic]{etype}[/]"
 
 
 class EntryItem(ListItem):
-    """A single entry in a ListView."""
-
-    def __init__(self, entry: dict, index: int) -> None:
+    def __init__(self, entry, index: int) -> None:
         super().__init__()
         self.entry = entry
         self.index = index
 
     def compose(self) -> ComposeResult:
-        yield Static(_entry_display(self.entry))
+        yield Static(_format_entry(self.entry))
 
 
-class HelpScreen(ModalScreen):
-    """Modal showing all keybindings."""
-
-    BINDINGS = [Binding("escape,q", "app.pop_screen", "Close")]
-
-    def compose(self) -> ComposeResult:
-        with Container(id="help-box"):
-            yield Static("[bold]BuJo \u2014 Keyboard Shortcuts[/bold]\n", markup=True)
-            yield Static(
-                "[bold]-- Adding entries --[/bold]\n"
-                "[cyan]a[/cyan]  Open add entry (type freely)\n\n"
-                "[bold]-- When an entry is selected --[/bold]\n"
-                "[cyan]t[/cyan]  Retype as \u00b7 Task\n"
-                "[green]x[/green]  Retype as \u00d7 Done\n"
-                "[blue]>[/blue]  Retype as > Migrated\n"
-                "[dim]k[/dim]  Retype as ~ Killed\n"
-                "[yellow]n[/yellow]  Retype as \u2013 Note\n"
-                "[magenta]e[/magenta]  Retype as \u25cb Event\n"
-                "[red]*[/red]  Retype as \u2605 Priority\n\n"
-                "[bold]-- Navigation --[/bold]\n"
-                "[white]\u2191 \u2193[/white]  Select entry\n"
-                "[white]m[/white]  Monthly log\n"
-                "[white]f[/white]  Future log\n"
-                "[white]r[/white]  Reflections\n"
-                "[white]M[/white]  Migration mode\n"
-                "[white]i[/white]  Insights\n"
-                "[white]Q[/white]  Quick capture\n"
-                "[white]?[/white]  This help screen\n"
-                "[white]d[/white]  Daily view\n\n"
-                "[dim]Press Escape to close[/dim]",
-                markup=True,
-            )
-
-    def on_mount(self) -> None:
-        self.query_one("#help-box").focus()
+# ── Secondary Screens ──────────────────────────────────
 
 
-class QuickEntryScreen(ModalScreen):
-    """Modal for quick entry of a new item."""
-
-    def __init__(self, symbol: str, symbol_name: str) -> None:
-        super().__init__()
-        self.symbol = symbol
-        self.symbol_name = symbol_name
-
-    def compose(self) -> ComposeResult:
-        display = SYMBOL_DISPLAY.get(self.symbol, self.symbol)
-        color = COLOR_MAP.get(self.symbol, "white")
-        with Container(id="entry-box"):
-            yield Static(
-                f"[bold {color}]{display}[/bold {color}] {self.symbol_name}",
-                markup=True,
-            )
-            yield Input(placeholder="What's on your mind...", id="entry-input")
-            yield Static(
-                "[dim]Enter to save \u00b7 Escape to cancel[/dim]", markup=True
-            )
-
-    def on_mount(self) -> None:
-        self.query_one("#entry-input").focus()
-
-    @on(Input.Submitted)
-    def save_entry(self, event: Input.Submitted) -> None:
-        text = event.value.strip()
-        if text:
-            append_entry(self.symbol, text)
-        self.dismiss(bool(text))
-
-    def on_key(self, event: events.Key) -> None:
-        if event.key == "escape":
-            self.dismiss(False)
-
-
-class AddEntryScreen(ModalScreen):
-    """Type-first entry modal. Symbol auto-detected from text."""
-
-    def compose(self) -> ComposeResult:
-        with Container(id="add-box"):
-            yield Static(
-                "[dim]type freely \u00b7 symbol auto-detected[/dim]", markup=True
-            )
-            yield Input(placeholder="what's on your mind...", id="add-input")
-            yield Static("", id="detected-type")
-            yield Static(
-                "[dim]t task  n note  e event  * priority  x done[/dim]",
-                markup=True,
-                id="override-hints",
-            )
-            yield Static("[dim]Enter save \u00b7 Escape cancel[/dim]", markup=True)
-
-    def on_mount(self) -> None:
-        from bujo.capture import detect_type
-
-        self.detected_symbol = "t"
-        self.override = None
-        self.query_one("#add-input").focus()
-        self._update_label()
-
-    @on(Input.Changed)
-    def on_input_changed(self, event: Input.Changed) -> None:
-        from bujo.capture import parse_quick_input
-
-        if self.override is None:
-            symbol, _ = parse_quick_input(event.value)
-            self.detected_symbol = symbol
-        self._update_label()
-
-    def _update_label(self) -> None:
-        sym = self.override or self.detected_symbol
-        display = SYMBOL_DISPLAY.get(sym, sym)
-        name = SYMBOLS.get(sym, ("Unknown", ""))[0]
-        color = COLOR_MAP.get(sym, "white")
-        self.query_one("#detected-type", Static).update(
-            f"[bold {color}]{display} {name}[/bold {color}]"
-        )
-
-    def on_key(self, event: events.Key) -> None:
-        if event.key == "escape":
-            self.dismiss(False)
-            return
-        if event.key in ("t", "x", ">", "k", "n", "e", "*"):
-            self.override = event.key
-            self._update_label()
-            event.stop()
-
-    @on(Input.Submitted)
-    def save_entry(self, event: Input.Submitted) -> None:
-        text = event.value.strip()
-        if text:
-            sym = self.override or self.detected_symbol
-            from bujo.capture import parse_quick_input
-
-            _, cleaned = parse_quick_input(text)
-            append_entry(sym, cleaned if self.override is None else text)
-        self.dismiss(bool(text))
-
-
-class MigrationScreen(Screen):
-    """Screen for monthly migration of pending tasks."""
-
+class MonthlyView(Screen):
     BINDINGS = [
         Binding("escape,q", "app.pop_screen", "Back"),
-        Binding(">", "migrate", "Keep/Migrate"),
-        Binding("d", "kill", "Kill"),
-        Binding("f", "to_future", "Future Log"),
-        Binding("j", "cursor_down", "Down"),
-        Binding("k", "cursor_up", "Up"),
+        Binding("a", "add_priority", "Add"),
+        Binding("e", "edit_raw", "Edit"),
     ]
 
     def compose(self) -> ComposeResult:
         yield Header()
-        with Container(id="migration-container"):
-            yield Static(
-                "[bold]Migration Mode[/bold]  [dim]Review unfinished tasks[/dim]\n",
-                markup=True,
-                id="mig-header",
+        with Vertical(id="secondary-layout"):
+            yield Static("", id="secondary-title")
+            yield Static("\u2500" * 40, id="secondary-separator")
+            yield ScrollableContainer(
+                Static("", id="secondary-content"),
+                id="secondary-scroll",
             )
-            yield Static("", id="mig-question")
+            yield Static(
+                "[dim italic]a add priority \u00b7 e edit in $EDITOR \u00b7 Escape back[/dim italic]",
+                id="secondary-hints",
+            )
+
+    def on_mount(self) -> None:
+        self.refresh()
+
+    def refresh(self, *args, **kwargs) -> None:
+        month_str = date.today().strftime("%B %Y")
+        self.query_one("#secondary-title", Static).update(f"[bold]{month_str}[/bold]")
+        p = get_monthly_path()
+        if not p.exists():
+            p.write_text(f"# {month_str}\n\n## Priorities\n\n", encoding="utf-8")
+        try:
+            content = read_text_safe(p)
+        except (OSError, PermissionError):
+            content = "_(could not read file)_"
+        self.query_one("#secondary-content", Static).update(content)
+
+    @on(Input.Submitted, "#add-input")
+    def on_add_submitted(self, event: Input.Submitted) -> None:
+        text = event.value.strip()
+        if text:
+            from bujo.capture import parse_quick_input
+
+            sym, cleaned = parse_quick_input(text)
+            append_entry(sym, cleaned)
+        self.remove("#add-container")
+        self.refresh()
+
+    def action_add_priority(self) -> None:
+        from textual.containers import Container
+
+        container = Container(id="add-container")
+        self.query_one("#secondary-layout").mount(
+            Static("[dim]New priority:[/dim]", id="add-label"),
+            Input(placeholder="priority...", id="add-input"),
+            after=self.query_one("#secondary-hints"),
+        )
+        self.query_one("#add-input", Input).focus()
+
+    def action_edit_raw(self) -> None:
+        open_in_editor(get_monthly_path())
+        self.refresh()
+
+
+class FutureView(Screen):
+    BINDINGS = [
+        Binding("escape,q", "app.pop_screen", "Back"),
+        Binding("a", "add_item", "Add"),
+        Binding("e", "edit_raw", "Edit"),
+    ]
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        with Vertical(id="secondary-layout"):
+            yield Static("[bold]Future Log[/bold]", id="secondary-title")
+            yield Static("\u2500" * 40, id="secondary-separator")
+            yield ScrollableContainer(
+                Static("", id="secondary-content"),
+                id="secondary-scroll",
+            )
+            yield Static(
+                "[dim italic]a add \u00b7 e edit in $EDITOR \u00b7 Escape back[/dim italic]",
+                id="secondary-hints",
+            )
+
+    def on_mount(self) -> None:
+        self.refresh()
+
+    def refresh(self, *args, **kwargs) -> None:
+        p = get_future_path()
+        if not p.exists():
+            p.write_text(
+                "# Future Log\n\nThings parked for later. Not dead \u2014 just not now.\n\n",
+                encoding="utf-8",
+            )
+        try:
+            content = read_text_safe(p)
+        except (OSError, PermissionError):
+            content = "_(could not read file)_"
+        self.query_one("#secondary-content", Static).update(content)
+
+    @on(Input.Submitted, "#add-input")
+    def on_add_submitted(self, event: Input.Submitted) -> None:
+        text = event.value.strip()
+        if text:
+            append_entry(">", text)
+        self.remove("#add-container")
+        self.refresh()
+
+    def action_add_item(self) -> None:
+        self.query_one("#secondary-layout").mount(
+            Static("[dim]New future item:[/dim]", id="add-label"),
+            Input(placeholder="park for later...", id="add-input"),
+            after=self.query_one("#secondary-hints"),
+        )
+        self.query_one("#add-input", Input).focus()
+
+    def action_edit_raw(self) -> None:
+        open_in_editor(get_future_path())
+        self.refresh()
+
+
+class MigrationScreen(Screen):
+    BINDINGS = [
+        Binding("escape,q", "app.pop_screen", "Back"),
+        Binding(">", "keep", "Keep"),
+        Binding("d", "kill", "Kill"),
+        Binding("f", "to_future", "Future"),
+        Binding("up", "cursor_up", "Up"),
+        Binding("down", "cursor_down", "Down"),
+    ]
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        with Vertical(id="secondary-layout"):
+            yield Static("[bold]Migration[/bold]", id="secondary-title")
+            yield Static("\u2500" * 40, id="secondary-separator")
+            yield Static("", id="mig-status")
             yield ListView(id="mig-list")
             yield Static(
-                "\n[cyan]>[/cyan] migrate  [red]d[/red] kill  [blue]f[/blue] future log  [dim]\u2191\u2193 navigate[/dim]",
-                markup=True,
-                id="mig-actions",
+                "[dim italic]> keep \u00b7 d kill \u00b7 f future \u00b7 "
+                "\u2191\u2193 navigate \u00b7 Escape done[/dim italic]",
+                id="secondary-hints",
             )
-        yield Footer()
 
     def on_mount(self) -> None:
         self.pending: list[dict] = []
@@ -360,37 +351,68 @@ class MigrationScreen(Screen):
                     )
 
         if not self.pending:
-            self.query_one("#mig-question", Static).update(
-                "[green]No pending tasks. You're clean.[/green]"
+            self.query_one("#mig-status", Static).update(
+                "[dim italic]no pending tasks. you're clean.[/dim italic]"
             )
             return
 
+        count = len(self.pending)
+        self.query_one("#mig-status", Static).update(
+            f"[dim italic]{count} pending \u2014 "
+            f"would you write this again today?[/dim italic]"
+        )
         for i, e in enumerate(self.pending):
             lv.append(EntryItem(e, i))
 
-        self.update_question()
-
-    def update_question(self) -> None:
-        if not self.pending:
+    def _replace_in_source(self, entry: dict, new_sym: str) -> None:
+        f = entry["source_file"]
+        try:
+            content = read_text_safe(f)
+        except (OSError, PermissionError):
             return
-        self.query_one("#mig-question", Static).update(
-            "[dim]Would you write this task again today?[/dim]"
-        )
+        new_line = f"{new_sym} {entry['text']}"
+        content = content.replace(entry["raw"], new_line, 1)
+        f.write_text(content, encoding="utf-8")
 
-    def action_migrate(self) -> None:
-        self._act_on_selected(">")
-
-    def action_kill(self) -> None:
-        self._act_on_selected("k")
-
-    def action_to_future(self) -> None:
+    def _remove_selected(self) -> None:
         lv = self.query_one("#mig-list", ListView)
         if lv.highlighted_child is None:
             return
         idx = lv.index
         if idx is None or idx >= len(self.pending):
             return
-        entry = self.pending[idx]
+        self.pending.pop(idx)
+        lv.highlighted_child.remove()
+        if not self.pending:
+            self.query_one("#mig-status", Static).update(
+                "[dim italic]no pending tasks. you're clean.[/dim italic]"
+            )
+
+    def action_keep(self) -> None:
+        lv = self.query_one("#mig-list", ListView)
+        if lv.highlighted_child is None or lv.index is None:
+            return
+        if lv.index >= len(self.pending):
+            return
+        self._replace_in_source(self.pending[lv.index], "t")
+        self._remove_selected()
+
+    def action_kill(self) -> None:
+        lv = self.query_one("#mig-list", ListView)
+        if lv.highlighted_child is None or lv.index is None:
+            return
+        if lv.index >= len(self.pending):
+            return
+        self._replace_in_source(self.pending[lv.index], "k")
+        self._remove_selected()
+
+    def action_to_future(self) -> None:
+        lv = self.query_one("#mig-list", ListView)
+        if lv.highlighted_child is None or lv.index is None:
+            return
+        if lv.index >= len(self.pending):
+            return
+        entry = self.pending[lv.index]
         future = get_future_path()
         try:
             existing = read_text_safe(future) if future.exists() else "# Future Log\n\n"
@@ -399,31 +421,7 @@ class MigrationScreen(Screen):
         existing = existing.rstrip("\n") + f"\n> {entry['text']}\n"
         future.write_text(existing, encoding="utf-8")
         self._replace_in_source(entry, ">")
-        lv.highlighted_child.remove()
-        self.pending.pop(idx)
-
-    def _act_on_selected(self, new_sym: str) -> None:
-        lv = self.query_one("#mig-list", ListView)
-        if lv.highlighted_child is None:
-            return
-        idx = lv.index
-        if idx is None or idx >= len(self.pending):
-            return
-        entry = self.pending[idx]
-        self._replace_in_source(entry, new_sym)
-        lv.highlighted_child.remove()
-        self.pending.pop(idx)
-
-    def _replace_in_source(self, entry: dict, new_sym: str) -> None:
-        f = entry["source_file"]
-        try:
-            content = read_text_safe(f)
-        except (OSError, PermissionError):
-            return
-        old_line = entry["raw"]
-        new_line = f"{new_sym} {entry['text']}"
-        content = content.replace(old_line, new_line, 1)
-        f.write_text(content, encoding="utf-8")
+        self._remove_selected()
 
     def action_cursor_down(self) -> None:
         self.query_one("#mig-list", ListView).action_cursor_down()
@@ -432,55 +430,101 @@ class MigrationScreen(Screen):
         self.query_one("#mig-list", ListView).action_cursor_up()
 
 
+class HelpScreen(Screen):
+    BINDINGS = [Binding("escape,q", "app.pop_screen", "Close")]
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        with Vertical(id="secondary-layout"):
+            yield Static("[bold]BuJo \u2014 how it works[/bold]", id="secondary-title")
+            yield Static("\u2500" * 40, id="secondary-separator")
+            yield ScrollableContainer(
+                Static(
+                    "\n[dim italic]just type. prefix sets the type:[/dim italic]\n\n"
+                    "[cyan]t[/cyan] or [cyan]task[/cyan]        \u00b7  task\n"
+                    "[magenta]e[/magenta] or [magenta]event[/magenta]       \u25cb  event\n"
+                    "[white]n[/white] or [white]note[/white]         \u2013  note\n"
+                    "[red]*[/red] or [red]priority[/red]    \u2605  priority\n"
+                    "[green]x[/green] or [green]done:[/green]       \u00d7  done\n"
+                    "[dim]k[/dim] or [dim]kill:[/dim]         ~  killed\n"
+                    "[blue]>[/blue]                  >  migrated\n"
+                    "[dim italic](no prefix)        \u2013  note[/dim italic]\n\n"
+                    "[dim italic]add ! to the end of anything \u2192 priority[/dim italic]\n\n"
+                    "\u2500" * 40 + "\n\n"
+                    "[dim italic]navigation[/dim italic]  (Escape to enter, Escape to exit)\n"
+                    "  \u2191 \u2193    move through entries\n"
+                    "  x      mark done\n"
+                    "  k      kill\n"
+                    "  >      migrate\n"
+                    "  r      retype (edit and re-save)\n\n"
+                    "[dim italic]views[/dim italic]\n"
+                    "  m          monthly log\n"
+                    "  f          future log\n"
+                    "  M          migration pass\n"
+                    "  Ctrl+B     coach\n"
+                    "  ?          this screen\n"
+                    "  q          quit\n",
+                    markup=True,
+                ),
+            )
+            yield Static(
+                "[dim italic]Escape to close[/dim italic]",
+                id="secondary-hints",
+            )
+
+
+# ── DailyView ──────────────────────────────────────────
+
+
 class DailyView(Screen):
-    """Main daily log view."""
+    """Main daily log with always-on input bar."""
+
+    nav_mode = reactive(False)
 
     BINDINGS = [
-        Binding("a", "add_entry", "Add"),
-        Binding("e", "edit_raw", "Edit raw"),
-        Binding("r", "reflection", "Reflect"),
+        Binding("escape", "toggle_mode", "Toggle mode"),
+        Binding("up", "cursor_up", "Up", show=False),
+        Binding("down", "cursor_down", "Down", show=False),
+        Binding("x", "mark_done", "Done", show=False),
+        Binding("k", "kill_entry", "Kill", show=False),
+        Binding(">", "migrate_entry", "Migrate", show=False),
+        Binding("r", "retype_entry", "Retype", show=False),
         Binding("m", "monthly", "Monthly"),
         Binding("f", "future", "Future"),
         Binding("M", "migration", "Migrate all"),
-        Binding("i", "insights", "Insights"),
-        Binding("Q", "quick_capture", "Quick capture"),
         Binding("?", "help", "Help"),
-        # Retype bindings (hidden, only work when entry selected)
-        Binding("t", "retype_task", "Task", show=False),
-        Binding("x", "retype_done", "Done", show=False),
-        Binding(">", "retype_migrate", "Migrate", show=False),
-        Binding("k", "retype_kill", "Kill", show=False),
-        Binding("n", "retype_note", "Note", show=False),
-        Binding("e", "retype_event", "Event", show=False),
-        Binding("*", "retype_priority", "Priority", show=False),
+        Binding("q", "quit", "Quit"),
+        Binding("ctrl+b", "coach", "Coach"),
     ]
 
     def compose(self) -> ComposeResult:
         yield Header()
         with Vertical(id="daily-layout"):
             yield Static("", id="date-label")
-            yield Static("", id="entry-count")
+            yield Static("", id="greeting-label")
+            yield Static("", id="count-label")
+            yield Static("\u2500" * 48, id="separator")
             yield ScrollableContainer(
                 Static(
-                    "[dim italic]Press a to add \u00b7 type naturally \u00b7 auto-detects symbol[/dim italic]",
+                    "[dim italic]just start typing[/dim italic]",
                     id="empty-hint",
                 ),
                 ListView(id="entry-list"),
                 id="entry-scroll",
             )
-            yield Static(
-                "[dim]a add  t x > k n e * retype  ? help[/dim]",
-                markup=True,
-                id="hints",
-            )
+            yield Static("", id="inline-display")
+            yield Static("", id="hint-bar")
+            yield Static("\u25b8 ", id="input-prompt")
+            yield Input(placeholder="", id="main-input")
         yield Footer()
 
     def on_mount(self) -> None:
+        self._current_coach_mode = False
         self.refresh_log()
 
     def refresh_log(self) -> None:
-        from bujo.time import session_greeting
         from bujo.analytics import InsightsEngine
+        from bujo.time import session_greeting
 
         content = today_log()
         entries = parse_entries(content, today_path(), date.today())
@@ -493,91 +537,200 @@ class DailyView(Screen):
         s = engine.streak()
 
         greeting = session_greeting(streak=s, pending_count=pending)
-        self.query_one("#date-label", Static).update(f"[bold]{greeting}[/bold]")
+        self.query_one("#date-label", Static).update(
+            f"[bold]{date.today().strftime('%A, %B %d %Y')}[/bold]"
+        )
+        self.query_one("#greeting-label", Static).update(f"{greeting}")
 
         lv = self.query_one("#entry-list", ListView)
         lv.clear()
 
         empty_hint = self.query_one("#empty-hint", Static)
+        inline = self.query_one("#inline-display", Static)
+
+        # Hide inline coach display
+        inline.update("")
+        inline.display = False
 
         if not entries:
             empty_hint.display = True
             lv.display = False
-            self.query_one("#entry-count", Static).update(
-                "[dim italic]No entries yet[/dim italic]"
+            self.query_one("#count-label", Static).update(
+                "[dim italic]no entries yet[/dim italic]"
             )
-            return
-
-        empty_hint.display = False
-        lv.display = True
-
-        for i, e in enumerate(entries):
-            lv.append(
-                EntryItem(
-                    {
-                        "symbol": e.symbol,
-                        "display": e.display,
-                        "text": e.text,
-                        "type": e.type,
-                        "raw": e.raw,
-                    },
-                    i,
+            # Session detection: empty → input mode
+            self.nav_mode = False
+            self._set_input_focus()
+        else:
+            empty_hint.display = False
+            lv.display = True
+            for i, e in enumerate(entries):
+                lv.append(
+                    EntryItem(
+                        {
+                            "symbol": e.symbol,
+                            "display": e.display,
+                            "text": e.text,
+                            "type": e.type,
+                            "raw": e.raw,
+                        },
+                        i,
+                    )
                 )
+            self.query_one("#count-label", Static).update(
+                f"[dim]{done} done[/dim]  [dim]\u00b7[/dim]  "
+                f"[dim]{pending} pending[/dim]  [dim]\u00b7[/dim]  "
+                f"[dim]{priority} priority[/dim]"
             )
+            # Session detection: entries exist → nav mode
+            self.nav_mode = True
+            self._set_nav_focus_last()
 
-        self.query_one("#entry-count", Static).update(
-            f"[green]{done} done[/green]  [dim]·[/dim]  [cyan]{pending} pending[/cyan]  [dim]·[/dim]  [red]{priority} priority[/red]"
+        # First-run check
+        if not FIRST_RUN_FLAG.exists() and not has_any_daily_files():
+            self._show_first_run()
+        else:
+            self._hide_first_run()
+
+        self._update_hint_bar()
+
+    def _show_first_run(self) -> None:
+        greeting = self.query_one("#greeting-label", Static)
+        greeting.update(
+            "[bold]BuJo \u2014 your ADHD journal[/bold]\n\n"
+            f"[dim]vault ready at {VAULT}[/dim]\n\n"
+            "[dim]just start typing. prefix is optional:[/dim]\n"
+            "[cyan]t[/cyan] or [cyan]task[/cyan]      \u2192 task\n"
+            "[magenta]e[/magenta] or [magenta]event[/magenta]     \u2192 event\n"
+            "[white]n[/white] or [white]note[/white]      \u2192 note\n"
+            "[red]*[/red] or [red]priority[/red]  \u2192 priority\n"
+            "[dim italic](no prefix)      \u2192 note[/dim italic]\n\n"
+            "[dim]anything with ! at the end becomes a priority.[/dim]"
         )
 
-    @work(thread=True)
-    def action_add_entry(self) -> None:
-        saved = self.app.push_screen_wait(AddEntryScreen())
-        if saved:
-            self.app.call_from_thread(self.refresh_log)
+    def _hide_first_run(self) -> None:
+        pass  # greeting is set by refresh_log
 
-    def _retype_selected(self, new_symbol: str) -> None:
-        """Change the type of the currently highlighted entry."""
+    def _set_input_focus(self) -> None:
+        inp = self.query_one("#main-input", Input)
+        inp.focus()
+
+    def _set_nav_focus_last(self) -> None:
         lv = self.query_one("#entry-list", ListView)
-        if lv.highlighted_child is None:
+        if lv.children:
+            lv.focus()
+            # Move to last entry
+            lv.index = len(lv.children) - 1
+
+    def _update_hint_bar(self) -> None:
+        hint = self.query_one("#hint-bar", Static)
+        if self.nav_mode:
+            hint.update(
+                "[dim italic][nav][/dim italic]  "
+                "[dim]\u2191\u2193 move[/dim]  "
+                "[dim]x done[/dim]  "
+                "[dim]k kill[/dim]  "
+                "[dim]> migrate[/dim]  "
+                "[dim]r retype[/dim]  "
+                "[dim]Escape back[/dim]"
+            )
+        else:
+            hint.update(
+                "[dim italic][input][/dim italic]  "
+                "[dim]Ctrl+B coach[/dim]  "
+                "[dim]m monthly[/dim]  "
+                "[dim]f future[/dim]  "
+                "[dim]M migrate[/dim]  "
+                "[dim]? help[/dim]  "
+                "[dim]q quit[/dim]"
+            )
+
+    def watch_nav_mode(self, value: bool) -> None:
+        self._update_hint_bar()
+
+    def action_toggle_mode(self) -> None:
+        if self._current_coach_mode:
+            self._close_coach()
             return
-        idx = lv.index
+
+        if self.nav_mode:
+            self.nav_mode = False
+            self._set_input_focus()
+        else:
+            self.nav_mode = True
+            self._set_nav_focus_last()
+
+    def action_cursor_up(self) -> None:
+        if not self.nav_mode:
+            return
+        lv = self.query_one("#entry-list", ListView)
+        if lv.children and lv.index is not None and lv.index > 0:
+            lv.index -= 1
+
+    def action_cursor_down(self) -> None:
+        if not self.nav_mode:
+            return
+        lv = self.query_one("#entry-list", ListView)
+        if lv.children and lv.index is not None and lv.index < len(lv.children) - 1:
+            lv.index += 1
+
+    def _get_selected_entry(self) -> dict | None:
+        lv = self.query_one("#entry-list", ListView)
+        if lv.highlighted_child is None or lv.index is None:
+            return None
         entries = parse_entries(today_log(), today_path(), date.today())
-        if idx is None or idx >= len(entries):
-            return
-        entry = entries[idx]
+        if lv.index >= len(entries):
+            return None
+        e = entries[lv.index]
+        return {"symbol": e.symbol, "text": e.text, "raw": e.raw, "type": e.type}
+
+    def _rewrite_entry(self, old_raw: str, new_sym: str, text: str) -> None:
         content = today_log()
-        new_line = f"{new_symbol} {entry.text}"
-        content = content.replace(entry.raw, new_line, 1)
+        new_line = f"{new_sym} {text}"
+        content = content.replace(old_raw, new_line, 1)
         save_today(content)
+
+    def action_mark_done(self) -> None:
+        if not self.nav_mode:
+            return
+        entry = self._get_selected_entry()
+        if entry is None:
+            return
+        self._rewrite_entry(entry["raw"], "x", entry["text"])
         self.refresh_log()
 
-    def action_retype_task(self) -> None:
-        self._retype_selected("t")
-
-    def action_retype_done(self) -> None:
-        self._retype_selected("x")
-
-    def action_retype_migrate(self) -> None:
-        self._retype_selected(">")
-
-    def action_retype_kill(self) -> None:
-        self._retype_selected("k")
-
-    def action_retype_note(self) -> None:
-        self._retype_selected("n")
-
-    def action_retype_event(self) -> None:
-        self._retype_selected("e")
-
-    def action_retype_priority(self) -> None:
-        self._retype_selected("*")
-
-    def action_edit_raw(self) -> None:
-        open_in_editor(today_path())
+    def action_kill_entry(self) -> None:
+        if not self.nav_mode:
+            return
+        entry = self._get_selected_entry()
+        if entry is None:
+            return
+        self._rewrite_entry(entry["raw"], "k", entry["text"])
         self.refresh_log()
 
-    def action_reflection(self) -> None:
-        self.app.push_screen(ReflectionView())
+    def action_migrate_entry(self) -> None:
+        if not self.nav_mode:
+            return
+        entry = self._get_selected_entry()
+        if entry is None:
+            return
+        self._rewrite_entry(entry["raw"], ">", entry["text"])
+        self.refresh_log()
+
+    def action_retype_entry(self) -> None:
+        if not self.nav_mode:
+            return
+        entry = self._get_selected_entry()
+        if entry is None:
+            return
+        # Mark old as migrated
+        self._rewrite_entry(entry["raw"], ">", entry["text"])
+        # Pre-fill input with text
+        inp = self.query_one("#main-input", Input)
+        inp.value = entry["text"]
+        # Switch to input mode
+        self.nav_mode = False
+        inp.focus()
 
     def action_monthly(self) -> None:
         self.app.push_screen(MonthlyView())
@@ -591,321 +744,150 @@ class DailyView(Screen):
     def action_help(self) -> None:
         self.app.push_screen(HelpScreen())
 
-    def action_insights(self) -> None:
-        self.app.push_screen(InsightsView())
-
-    def action_quick_capture(self) -> None:
-        self.app.push_screen(AddEntryScreen())
-
-
-class QuickCaptureScreen(ModalScreen):
-    """Modal for NLP-powered quick capture (same as AddEntryScreen)."""
-
-    def compose(self) -> ComposeResult:
-        with Container(id="add-box"):
-            yield Static(
-                "[dim]type freely \u00b7 symbol auto-detected[/dim]", markup=True
-            )
-            yield Input(placeholder="Capture anything...", id="add-input")
-            yield Static("", id="detected-type")
-            yield Static(
-                "[dim]t task  n note  e event  * priority  x done[/dim]",
-                markup=True,
-                id="override-hints",
-            )
-            yield Static("[dim]Enter save \u00b7 Escape cancel[/dim]", markup=True)
-
-    def on_mount(self) -> None:
-        self.detected_symbol = "t"
-        self.override = None
-        self.query_one("#add-input").focus()
-        self._update_label()
-
-    @on(Input.Changed)
-    def on_input_changed(self, event: Input.Changed) -> None:
-        from bujo.capture import parse_quick_input
-
-        if self.override is None:
-            symbol, _ = parse_quick_input(event.value)
-            self.detected_symbol = symbol
-        self._update_label()
-
-    def _update_label(self) -> None:
-        sym = self.override or self.detected_symbol
-        display = SYMBOL_DISPLAY.get(sym, sym)
-        name = SYMBOLS.get(sym, ("Unknown", ""))[0]
-        color = COLOR_MAP.get(sym, "white")
-        self.query_one("#detected-type", Static).update(
-            f"[bold {color}]{display} {name}[/bold {color}]"
-        )
-
-    def on_key(self, event: events.Key) -> None:
-        if event.key == "escape":
-            self.dismiss(False)
-            return
-        if event.key in ("t", "x", ">", "k", "n", "e", "*"):
-            self.override = event.key
-            self._update_label()
-            event.stop()
-
-    @on(Input.Submitted)
-    def save_entry(self, event: Input.Submitted) -> None:
-        text = event.value.strip()
-        if text:
-            sym = self.override or self.detected_symbol
-            from bujo.capture import parse_quick_input
-
-            _, cleaned = parse_quick_input(text)
-            append_entry(sym, cleaned if self.override is None else text)
-        self.dismiss(bool(text))
-
-
-class InsightsView(Screen):
-    """Analytics dashboard showing patterns and insights."""
-
-    BINDINGS = [Binding("escape,q", "app.pop_screen", "Back")]
-
-    def compose(self) -> ComposeResult:
-        yield Header()
-        with Vertical(id="insights-layout"):
-            yield Static("[bold]Insights[/bold]", markup=True)
-            yield ScrollableContainer(
-                Static("", id="insights-content"),
-                id="insights-scroll",
-            )
-            yield Static("[dim italic]q back[/dim italic]", markup=True)
-        yield Footer()
-
-    def on_mount(self) -> None:
-        self.refresh()
-
-    def refresh(self, *args, **kwargs) -> None:
+    @work(thread=True)
+    def action_coach(self) -> None:
         from bujo.analytics import InsightsEngine
 
         engine = InsightsEngine(VAULT)
-        report = engine.full_report()
+        reader = LogReader(VAULT)
+        all_logs = reader.load_all()
+        total = sum(len(log.entries) for log in all_logs)
 
-        if report["empty"]:
-            self.query_one("#insights-content", Static).update(
-                "[dim italic]Not enough data yet.\n"
-                "Keep logging for a few days and patterns will appear.\n\n"
-                "Try: bujo template morning[/dim italic]"
+        self.app.call_from_thread(self._show_coach, engine, total)
+
+    def _show_coach(self, engine, total: int) -> None:
+        self._current_coach_mode = True
+        self._previous_nav_mode = self.nav_mode
+
+        inline = self.query_one("#inline-display", Static)
+        lv = self.query_one("#entry-list", ListView)
+        empty = self.query_one("#empty-hint", Static)
+
+        # Hide list, show inline
+        lv.display = False
+        empty.display = False
+        inline.display = True
+
+        if total < 5:
+            remaining = 5 - total
+            inline.update(
+                f"\n[dim italic]write {remaining} more entr{'y' if remaining == 1 else 'ies'} first.\n"
+                f"i'll have something to say after 5.\n\n"
+                f"you have {total} so far.[/dim italic]\n\n"
+                f"[dim italic]any key to close[/dim italic]"
             )
+        else:
+            report = engine.full_report()
+            lines = [
+                "",
+                "[dim italic]\u2500\u2500 coach \u2500\u2500\u2500\u2500\u2500\u2500"
+                "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+                "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+                "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+                "\u2500\u2500\u2500\u2500\u2500\u2500\u2500[/dim italic]",
+                "",
+                f"  momentum      {report['momentum']}",
+                f"  streak        {report['streak']} day{'s' if report['streak'] != 1 else ''}",
+                f"  done today    {sum(1 for e in parse_entries(today_log(), today_path(), date.today()) if e.symbol == 'x')}",
+                "",
+            ]
+
+            stuck = report.get("stuck_tasks", [])
+            if stuck:
+                lines.append("[dim italic]  stuck[/dim italic]")
+                for t in stuck[:3]:
+                    lines.append(
+                        f"  \u00b7 {t['text']}  [dim]moved {t['count']} times[/dim]"
+                    )
+                lines.append("")
+
+            themes = report.get("kill_themes", {})
+            if themes:
+                lines.append("[dim italic]  dropping[/dim italic]")
+                for theme, count in list(themes.items())[:2]:
+                    lines.append(f"  {theme} tasks  [dim]killed {count} times[/dim]")
+                lines.append("")
+
+            productive = report.get("most_productive_time", "not enough data")
+            if "not enough" not in productive:
+                lines.append("[dim italic]  most productive[/dim italic]")
+                lines.append(f"  {productive}")
+                lines.append("")
+
+            lines.append("[dim italic]\u2500" * 48 + "[/dim italic]")
+            lines.append("")
+            lines.append(f"  [cyan]{report['nudge']}[/cyan]")
+            lines.append("")
+            lines.append("[dim italic]any key to close[/dim italic]")
+            inline.update("\n".join(lines))
+
+        # Dismiss on any key
+        self.query_one("#main-input", Input).focus()
+
+    def _close_coach(self) -> None:
+        self._current_coach_mode = False
+        inline = self.query_one("#inline-display", Static)
+        inline.update("")
+        inline.display = False
+        self.refresh_log()
+
+    @on(Input.Submitted, "#main-input")
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if self._current_coach_mode:
+            self._close_coach()
+            event.input.clear()
             return
 
-        momentum = report["momentum"]
-        streak = report["streak"]
-        completion = report["completion_rate_7d"]
-        alignment = report["priority_alignment_7d"]
-        nudge = report["nudge"]
-
-        momentum_bar = {
-            "building": "[green]\u2588\u2588\u2588\u2588\u2589\u2589[/green] building",
-            "steady": "[cyan]\u2588\u2588\u2588\u2588\u2588[/cyan] steady",
-            "stalling": "[yellow]\u2588\u2588\u2588\u2589\u2589[/yellow] stalling",
-            "stalled": "[red]\u2588\u2588\u2589\u2589\u2589[/red] stalled",
-            "new": "[dim]\u2589\u2589\u2589\u2589\u2589[/dim] new",
-        }.get(momentum, momentum)
-
-        lines = [
-            f"Momentum    {momentum_bar}",
-            f"Streak      {streak} day{'s' if streak != 1 else ''}",
-            f"This week   {completion:.0%} completion",
-            f"Priorities  {alignment:.0%} aligned",
-            "",
-        ]
-
-        stuck = report["stuck_tasks"]
-        if stuck:
-            lines.append("[dim italic]-- Stuck tasks --[/dim italic]")
-            for t in stuck[:3]:
-                lines.append(
-                    f"  [red]\u00b7[/red] {t['text']}  [dim]({t['count']}x)[/dim]"
-                )
-            lines.append("")
-
-        themes = report["kill_themes"]
-        if themes:
-            lines.append("[dim italic]-- You tend to drop --[/dim italic]")
-            for k, v in list(themes.items())[:3]:
-                lines.append(f"  {k} [dim]({v})[/dim]")
-            lines.append("")
-
-        lines.append("[dim italic]-- Today's nudge --[/dim italic]")
-        lines.append(f"{nudge}")
-
-        self.query_one("#insights-content", Static).update("\n".join(lines))
-
-
-class MonthlyView(Screen):
-    """Monthly priorities view."""
-
-    BINDINGS = [
-        Binding("escape,q", "app.pop_screen", "Back"),
-        Binding("a", "add_priority", "Add priority"),
-        Binding("e", "edit_raw", "Edit raw"),
-    ]
-
-    def compose(self) -> ComposeResult:
-        yield Header()
-        with Vertical(id="monthly-layout"):
-            yield Static("", id="month-label")
-            yield ScrollableContainer(
-                Static("", id="monthly-content"),
-                id="monthly-scroll",
-            )
-            yield Static(
-                "[dim]a add priority  e edit raw  q back[/dim]",
-                markup=True,
-                id="m-hints",
-            )
-        yield Footer()
-
-    def on_mount(self) -> None:
-        self.refresh()
-
-    def refresh(self, *args, **kwargs) -> None:
-        month_str = date.today().strftime("%B %Y")
-        self.query_one("#month-label", Static).update(f"[bold]{month_str}[/bold]")
-        p = get_monthly_path()
-        if not p.exists():
-            p.write_text(f"# {month_str}\n\n## Priorities\n\n", encoding="utf-8")
-        try:
-            content = read_text_safe(p)
-        except (OSError, PermissionError):
-            content = "_(could not read file)_"
-        self.query_one("#monthly-content", Static).update(content)
-
-    @work(thread=True)
-    def action_add_priority(self) -> None:
-        saved = self.app.push_screen_wait(QuickEntryScreen("*", "Priority"))
-        if saved:
-            self.app.call_from_thread(self.refresh)
-
-    def action_edit_raw(self) -> None:
-        open_in_editor(get_monthly_path())
-        self.refresh()
-
-
-class FutureView(Screen):
-    """Future log view for parked items."""
-
-    BINDINGS = [
-        Binding("escape,q", "app.pop_screen", "Back"),
-        Binding("e", "edit_raw", "Edit raw"),
-        Binding("a", "add_item", "Add item"),
-    ]
-
-    def compose(self) -> ComposeResult:
-        yield Header()
-        with Vertical(id="future-layout"):
-            yield Static("[bold]Future Log[/bold]", markup=True, id="future-label")
-            yield ScrollableContainer(
-                Static("", id="future-content"),
-                id="future-scroll",
-            )
-            yield Static("[dim]a add  e edit raw  q back[/dim]", markup=True)
-        yield Footer()
-
-    def on_mount(self) -> None:
-        self.refresh()
-
-    def refresh(self, *args, **kwargs) -> None:
-        p = get_future_path()
-        if not p.exists():
-            p.write_text(
-                "# Future Log\n\nThings parked for later. Not dead \u2014 just not now.\n\n",
-                encoding="utf-8",
-            )
-        try:
-            content = read_text_safe(p)
-        except (OSError, PermissionError):
-            content = "_(could not read file)_"
-        self.query_one("#future-content", Static).update(content)
-
-    def action_edit_raw(self) -> None:
-        open_in_editor(get_future_path())
-        self.refresh()
-
-    @work(thread=True)
-    def action_add_item(self) -> None:
-        saved = self.app.push_screen_wait(QuickEntryScreen(".", "Future item"))
-        if saved:
-            self.app.call_from_thread(self.refresh)
-
-
-class ReflectionView(Screen):
-    """Reflections view for starred insights."""
-
-    BINDINGS = [
-        Binding("escape,q", "app.pop_screen", "Back"),
-        Binding("e", "edit_raw", "Edit raw"),
-        Binding("n", "new_reflection", "New"),
-    ]
-
-    def compose(self) -> ComposeResult:
-        yield Header()
-        with Vertical(id="reflection-layout"):
-            yield Static("[bold]Reflections[/bold]", markup=True)
-            yield ScrollableContainer(
-                Static("", id="reflection-content"),
-                id="reflection-scroll",
-            )
-            yield Static("[dim]n new  e edit  q back[/dim]", markup=True)
-        yield Footer()
-
-    def on_mount(self) -> None:
-        self.refresh()
-
-    def refresh(self, *args, **kwargs) -> None:
-        files = sorted(REFLECTIONS.glob("*.md"), reverse=True)
-        if not files:
-            self.query_one("#reflection-content", Static).update(
-                "[dim italic]No reflections yet. These are your starred entries worth keeping.\n"
-                "Paste insights from your daily logs here.[/dim italic]"
-            )
+        text = event.value.strip()
+        if not text:
+            # Empty submit: if not in nav mode, maybe switch to nav
+            if not self.nav_mode:
+                entries = parse_entries(today_log(), today_path(), date.today())
+                if entries:
+                    self.nav_mode = True
+                    self._set_nav_focus_last()
             return
-        contents: list[str] = []
-        for f in files[:5]:
-            try:
-                contents.append(read_text_safe(f))
-            except (OSError, PermissionError):
-                contents.append("_(could not read file)_")
-        content = "\n\n---\n\n".join(contents)
-        self.query_one("#reflection-content", Static).update(content)
 
-    def action_new_reflection(self) -> None:
-        p = REFLECTIONS / f"{date.today().isoformat()}.md"
-        open_in_editor(p)
-        self.refresh()
+        from bujo.capture import parse_quick_input
 
-    def action_edit_raw(self) -> None:
-        files = sorted(REFLECTIONS.glob("*.md"), reverse=True)
-        if files:
-            open_in_editor(files[0])
-        self.refresh()
+        symbol, cleaned = parse_quick_input(text)
+        append_entry(symbol, cleaned)
+
+        # Write first-run flag
+        if not FIRST_RUN_FLAG.exists():
+            FIRST_RUN_FLAG.write_text("done\n", encoding="utf-8")
+
+        event.input.clear()
+        self.refresh_log()
+
+    def on_key(self, event: events.Key) -> None:
+        if self._current_coach_mode and event.key not in ("escape", "q"):
+            self._close_coach()
+            event.stop()
+            return
+
+        if self.nav_mode and event.key in ("t", "n", "e", "*", "p"):
+            # Valid prefix typed → switch to input mode, let Input handle it
+            self.nav_mode = False
+            self._set_input_focus()
+
+
+# ── App ────────────────────────────────────────────────
 
 
 class BuJoApp(App):
-    """Main BuJo Textual application."""
-
     CSS_PATH = "app.tcss"
     TITLE = "BuJo"
     BINDINGS = [
         Binding("ctrl+c", "quit", "Quit"),
-        Binding("d", "daily", "Daily"),
     ]
 
     def on_mount(self) -> None:
         ensure_vault()
         self.push_screen(DailyView())
 
-    def action_daily(self) -> None:
-        self.push_screen(DailyView())
-
 
 def main() -> None:
-    """Entry point for the TUI."""
     ensure_vault()
     app = BuJoApp()
     app.run()
