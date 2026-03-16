@@ -523,7 +523,7 @@ class DailyView(Screen):
         """Focus the main input widget."""
         try:
             inp = self.query_one("#main-input", Input)
-            inp.focus()
+            self.call_after_refresh(inp.focus)
         except Exception:
             pass
 
@@ -720,7 +720,7 @@ class DailyView(Screen):
         inp.value = entry["text"]
         # Switch to input mode
         self.nav_mode = False
-        self._focus_input()
+        self.call_after_refresh(inp.focus)
 
     @work(thread=True)
     def action_coach(self) -> None:
@@ -806,7 +806,8 @@ class DailyView(Screen):
         inline.display = False
         self.refresh_log()
         # Refocus input
-        self.set_timer(0.05, self._focus_input)
+        inp = self.query_one("#main-input", Input)
+        self.call_after_refresh(inp.focus)
 
     @on(Input.Submitted, "#main-input")
     def on_input_submitted(self, event: Input.Submitted) -> None:
@@ -949,12 +950,6 @@ class DailyView(Screen):
             self.app.call_from_thread(show_other_error)
 
     def on_key(self, event: events.Key) -> None:
-        import sys
-
-        print(
-            f"DEBUG on_key: key={event.key!r} char={event.character!r}", file=sys.stderr
-        )
-
         # Coach dismiss: any key (except ctrl+b) closes coach
         if self._current_coach_mode:
             if event.key != "ctrl+b":
@@ -1048,10 +1043,18 @@ class DailyView(Screen):
                 self.app.exit()
                 event.stop()
             elif key in ("t", "n", "e", "star", "p"):
-                # Prefix key typed in nav mode — switch to input mode
+                prefix_map = {"t": "t ", "n": "n ", "e": "e ", "star": "* ", "p": "p "}
+                prefix = prefix_map.get(key, "")
                 self.nav_mode = False
-                self._focus_input()
-                # Don't stop event - let the key go to Input widget
+
+                def _focus_and_insert(p=prefix):
+                    inp = self.query_one("#main-input", Input)
+                    inp.focus()
+                    inp.value = p
+                    inp.cursor_position = len(p)
+
+                self.call_after_refresh(_focus_and_insert)
+                event.stop()
             return
 
         # In input mode, let the Input widget handle everything
