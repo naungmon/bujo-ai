@@ -482,18 +482,6 @@ class DailyView(Screen):
     nav_mode = reactive(False)
 
     BINDINGS = [
-        Binding("escape", "toggle_mode", "Toggle mode"),
-        Binding("up", "cursor_up", "Up", show=False),
-        Binding("down", "cursor_down", "Down", show=False),
-        Binding("x", "mark_done", "Done", show=False),
-        Binding("k", "kill_entry", "Kill", show=False),
-        Binding(">", "migrate_entry", "Migrate", show=False),
-        Binding("r", "retype_entry", "Retype", show=False),
-        Binding("m", "monthly", "Monthly"),
-        Binding("f", "future", "Future"),
-        Binding("M", "migration", "Migrate all"),
-        Binding("?", "help", "Help"),
-        Binding("q", "quit", "Quit"),
         Binding("ctrl+b", "coach", "Coach"),
     ]
 
@@ -648,32 +636,6 @@ class DailyView(Screen):
     def watch_nav_mode(self, value: bool) -> None:
         self._update_hint_bar()
 
-    def action_toggle_mode(self) -> None:
-        if self._current_coach_mode:
-            self._close_coach()
-            return
-
-        if self.nav_mode:
-            self.nav_mode = False
-            self._set_input_focus()
-        else:
-            self.nav_mode = True
-            self._set_nav_focus_last()
-
-    def action_cursor_up(self) -> None:
-        if not self.nav_mode:
-            return
-        lv = self.query_one("#entry-list", ListView)
-        if lv.children and lv.index is not None and lv.index > 0:
-            lv.index -= 1
-
-    def action_cursor_down(self) -> None:
-        if not self.nav_mode:
-            return
-        lv = self.query_one("#entry-list", ListView)
-        if lv.children and lv.index is not None and lv.index < len(lv.children) - 1:
-            lv.index += 1
-
     def _get_selected_entry(self) -> dict | None:
         lv = self.query_one("#entry-list", ListView)
         if lv.highlighted_child is None or lv.index is None:
@@ -731,18 +693,6 @@ class DailyView(Screen):
         # Switch to input mode
         self.nav_mode = False
         inp.focus()
-
-    def action_monthly(self) -> None:
-        self.app.push_screen(MonthlyView())
-
-    def action_future(self) -> None:
-        self.app.push_screen(FutureView())
-
-    def action_migration(self) -> None:
-        self.app.push_screen(MigrationScreen())
-
-    def action_help(self) -> None:
-        self.app.push_screen(HelpScreen())
 
     @work(thread=True)
     def action_coach(self) -> None:
@@ -861,15 +811,89 @@ class DailyView(Screen):
         self.refresh_log()
 
     def on_key(self, event: events.Key) -> None:
-        if self._current_coach_mode and event.key not in ("escape", "q"):
-            self._close_coach()
+        # Coach dismiss: any key (except ctrl+b) closes coach
+        if self._current_coach_mode:
+            if event.key != "ctrl+b":
+                self._close_coach()
+                event.stop()
+            return
+
+        key = event.key
+
+        # Escape toggles mode regardless of current mode
+        if key == "escape":
+            if self.nav_mode:
+                self.nav_mode = False
+                self._set_input_focus()
+            else:
+                entries = parse_entries(today_log(), today_path(), date.today())
+                if entries:
+                    self.nav_mode = True
+                    self._set_nav_focus_last()
             event.stop()
             return
 
-        if self.nav_mode and event.key in ("t", "n", "e", "*", "p"):
-            # Valid prefix typed → switch to input mode, let Input handle it
+        # All remaining keys only active in nav_mode
+        if not self.nav_mode:
+            return
+
+        if key == "up":
+            lv = self.query_one("#entry-list", ListView)
+            if lv.children and lv.index is not None and lv.index > 0:
+                lv.index -= 1
+            event.stop()
+        elif key == "down":
+            lv = self.query_one("#entry-list", ListView)
+            if lv.children and lv.index is not None and lv.index < len(lv.children) - 1:
+                lv.index += 1
+            event.stop()
+        elif key == "x":
+            entry = self._get_selected_entry()
+            if entry:
+                self._rewrite_entry(entry["raw"], "x", entry["text"])
+                self.refresh_log()
+            event.stop()
+        elif key == "k":
+            entry = self._get_selected_entry()
+            if entry:
+                self._rewrite_entry(entry["raw"], "k", entry["text"])
+                self.refresh_log()
+            event.stop()
+        elif key == ">":
+            entry = self._get_selected_entry()
+            if entry:
+                self._rewrite_entry(entry["raw"], ">", entry["text"])
+                self.refresh_log()
+            event.stop()
+        elif key == "r":
+            entry = self._get_selected_entry()
+            if entry:
+                self._rewrite_entry(entry["raw"], ">", entry["text"])
+                inp = self.query_one("#main-input", Input)
+                inp.value = entry["text"]
+                self.nav_mode = False
+                inp.focus()
+            event.stop()
+        elif key == "m":
+            self.app.push_screen(MonthlyView())
+            event.stop()
+        elif key == "f":
+            self.app.push_screen(FutureView())
+            event.stop()
+        elif key == "shift+m":
+            self.app.push_screen(MigrationScreen())
+            event.stop()
+        elif key == "question_mark":
+            self.app.push_screen(HelpScreen())
+            event.stop()
+        elif key == "q":
+            self.app.exit()
+            event.stop()
+        elif key in ("t", "n", "e", "star", "p"):
+            # Prefix key typed in nav mode — switch to input, let key fall through
             self.nav_mode = False
             self._set_input_focus()
+            # Don't stop event — let it reach the Input widget
 
 
 # ── App ────────────────────────────────────────────────
