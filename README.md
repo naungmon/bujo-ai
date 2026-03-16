@@ -163,7 +163,7 @@ In any Claude Code session, type `/bujo` to get a coaching synthesis based on
 your logs. Claude runs `bujo coach`, analyzes patterns, and asks one honest
 question.
 
-## KiloCode / Cursor / Windsurf Integration
+## KiloCode / Cursor / Windsurf (manual)
 
 Copy `.kilocode/` to your home directory:
 

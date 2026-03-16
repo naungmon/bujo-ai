@@ -15,5 +15,6 @@
 - Weekly summary with totals and insights
 - Global hotkey `Win+Shift+B` (`pip install bujo-journal[hotkey]`)
 - Obsidian frontmatter and dashboard integration (opt-in)
-- Claude Code, KiloCode, Cursor, Windsurf slash command support
+- Claude Code and KiloCode slash command support
 - Legacy Unicode file backward compatibility
+- Cursor/Windsurf integration guide (manual setup)
