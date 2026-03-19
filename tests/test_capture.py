@@ -2,7 +2,7 @@
 
 import pytest
 
-from bujo.capture import parse_quick_input, detect_type
+from bujo.capture import parse_quick_input, detect_type, apply_template
 
 
 # ---------------------------------------------------------------------------
@@ -120,3 +120,38 @@ class TestDetectType:
 
     def test_detect_event(self):
         assert detect_type("event: meeting at 3") == ("e", "Event")
+
+
+# ---------------------------------------------------------------------------
+# apply_template
+# ---------------------------------------------------------------------------
+
+
+class TestApplyTemplate:
+    def test_ascii_symbols(self, tmp_path):
+        """Templates with ASCII symbols should parse correctly."""
+        vault = tmp_path / "vault"
+        templates = vault / "templates"
+        templates.mkdir(parents=True)
+        (templates / "test.md").write_text(
+            "t buy milk\n* urgent thing\nn feeling good\n", encoding="utf-8"
+        )
+        result = apply_template("test", vault)
+        assert result == [("t", "buy milk"), ("*", "urgent thing"), ("n", "feeling good")]
+
+    def test_unicode_symbols(self, tmp_path):
+        """Templates with legacy Unicode symbols should parse correctly."""
+        vault = tmp_path / "vault"
+        templates = vault / "templates"
+        templates.mkdir(parents=True)
+        (templates / "test.md").write_text(
+            "\u00b7 buy milk\n\u2605 urgent thing\n", encoding="utf-8"
+        )
+        result = apply_template("test", vault)
+        assert result == [("t", "buy milk"), ("*", "urgent thing")]
+
+    def test_missing_template(self, tmp_path):
+        vault = tmp_path / "vault"
+        (vault / "templates").mkdir(parents=True)
+        result = apply_template("nonexistent", vault)
+        assert result == []

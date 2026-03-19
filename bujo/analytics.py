@@ -83,7 +83,9 @@ class InsightsEngine:
         last_week = last_week_done / last_week_total if last_week_total > 0 else 0.0
 
         all_logs = self.reader.load_range(7)
-        total_entries = sum(len(log.entries) for log in all_logs)
+        total_entries = sum(
+            len([e for e in log.entries if e.symbol != "<"]) for log in all_logs
+        )
         if total_entries < 3:
             return "new"
 
@@ -154,7 +156,9 @@ class InsightsEngine:
     def full_report(self) -> dict:
         """Structured output for bujo coach command."""
         logs = self.reader.load_range(7)
-        total_entries = sum(len(log.entries) for log in logs)
+        total_entries = sum(
+            len([e for e in log.entries if e.symbol != "<"]) for log in logs
+        )
 
         stall = self.stall_stats()
         event_map = self.event_density_mapping()
@@ -235,7 +239,9 @@ class InsightsEngine:
     def weekly_summary(self) -> dict:
         """Weekly summary with totals and insights."""
         logs = self.reader.load_range(7)
-        total_logged = sum(len(log.entries) for log in logs)
+        total_logged = sum(
+            len([e for e in log.entries if e.symbol != "<"]) for log in logs
+        )
         total_done = sum(len(log.done) for log in logs)
         total_killed = sum(len(log.killed) for log in logs)
         total_migrated = sum(len(log.migrated) for log in logs)

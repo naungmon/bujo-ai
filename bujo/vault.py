@@ -192,3 +192,90 @@ def load_yesterday_pending() -> list[dict]:
         }
         for e in pending
     ]
+
+
+def parse_future_log() -> dict[str, list[str]]:
+    """Parse future.md into {month_label: [raw_entries]} dict.
+
+    month_label like "June 2026" or "Unscheduled".
+    Entries are stored with > prefix.
+    """
+    import re
+
+    path = get_future_path()
+    if not path.exists():
+        return {}
+    content = read_text_safe(path)
+    if not content.strip():
+        return {}
+
+    result: dict[str, list[str]] = {}
+    current_month = "Unscheduled"
+
+    for line in content.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        m = re.match(r"^##\s+(.+)$", stripped)
+        if m:
+            current_month = m.group(1).strip()
+            if current_month not in result:
+                result[current_month] = []
+        elif stripped.startswith("> "):
+            result.setdefault(current_month, []).append(stripped)
+
+    return result
+
+
+def get_future_items_for_month(year: int, month: int) -> list[str]:
+    """Return future log entries scheduled for a specific month.
+
+    Matches "Month Year" headers (e.g. "June 2026") against the given year/month.
+    Returns list of entry texts without > prefix.
+    """
+    import calendar
+
+    month_name = calendar.month_name[month]
+    target_label = f"{month_name} {year}"
+    grouped = parse_future_log()
+    entries = grouped.get(target_label, [])
+    return [e[2:].strip() for e in entries]
+
+
+def append_future_entry(text: str, month_label: str | None = None) -> None:
+    """Append an entry to future.md under the given month header.
+
+    If month_label is None, uses "Unscheduled".
+    Entry is written with > prefix.
+    Creates month header if it doesn't exist.
+    """
+    future = get_future_path()
+    existing = read_text_safe(future) if future.exists() else ""
+
+    if month_label is None:
+        month_label = "Unscheduled"
+
+    header = f"## {month_label}"
+    if header not in existing:
+        header_block = f"\n\n{header}\n"
+        existing = existing.rstrip("\n") + header_block
+
+    existing = existing.rstrip("\n") + f"\n> {text}\n"
+    future.write_text(existing, encoding="utf-8")
+
+
+def mark_future_entry_done(text: str) -> None:
+    """Mark a future log entry as done (change > text to x text).
+
+    Scans future.md for > text and replaces with x text.
+    Does nothing if entry not found.
+    """
+    future = get_future_path()
+    if not future.exists():
+        return
+    content = read_text_safe(future)
+    old_line = f"> {text}"
+    new_line = f"x {text}"
+    if old_line in content:
+        content = content.replace(old_line, new_line, 1)
+        future.write_text(content, encoding="utf-8")

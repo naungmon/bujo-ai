@@ -36,7 +36,7 @@ bujo dump          ← multiline mode
 bujo dump --retry  ← re-parse saved drafts
 ```
 
-Or press Ctrl+D inside the TUI to enter dump mode.
+Type freely in the main input — AI parses everything.
 
 ## Install
 
@@ -145,9 +145,9 @@ They came back to update what happened. The app knows that.
 | (launch) | DailyView | Main entry list, always-on input bar |
 | `m` | MonthlyView | Monthly priorities (3-5 max) |
 | `f` | FutureView | Parked items, not dead |
-| `M` | MigrationScreen | Review pending tasks |
+| `Shift+M` | MigrationScreen | Review pending tasks |
+| `Shift+R` | ReviewView | Monthly 6-perspective review |
 | `Ctrl+B` | Coach | Inline coaching (any key dismisses) |
-| `Ctrl+D` | Dump mode | AI-powered free-form capture |
 | `/` | SearchView | Full vault search |
 | `?` | HelpScreen | Keybinding reference |
 
@@ -184,6 +184,7 @@ Files store ASCII. The TUI renders as Unicode.
 | `k` | ~ | Killed |
 | `n` | – | Note |
 | `e` | ○ | Event |
+| `<` | ← | Scheduled |
 | `*` | ★ | Priority |
 
 ## Coaching (Ctrl+B)

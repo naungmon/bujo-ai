@@ -45,6 +45,10 @@ class DayLog:
         return [e for e in self.entries if e.symbol == ">"]
 
     @property
+    def scheduled(self) -> list[Entry]:
+        return [e for e in self.entries if e.symbol == "<"]
+
+    @property
     def events(self) -> list[Entry]:
         return [e for e in self.entries if e.symbol == "e"]
 

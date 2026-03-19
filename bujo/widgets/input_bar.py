@@ -13,8 +13,30 @@ class BuJoInput(TextArea):
     """Main input TextArea that transfers focus on arrow-up at first line."""
 
     def _on_key(self, event: events.Key) -> None:
+        # Handle Enter — submit text to AI for parsing
+        if event.key == "enter":
+            text = self.text.strip()
+            if text:
+                self.load_text("")
+                self.screen._submit_new_entry(text)
+            event.prevent_default()
+            event.stop()
+            return
+
+        # Handle ? — open help screen when input is empty
+        if event.key == "question_mark":
+            if not self.text.strip():
+                try:
+                    from bujo.views.help import HelpScreen
+                    self.screen.app.push_screen(HelpScreen())
+                    event.prevent_default()
+                    event.stop()
+                    return
+                except Exception:
+                    pass
+
+        # Handle Up arrow — transfer focus to entry list at first line
         if event.key == "up":
-            # Transfer focus if on first line or empty
             cursor_row = self.cursor_location[0]
             if cursor_row == 0 or not self.text.strip():
                 try:
@@ -26,4 +48,5 @@ class BuJoInput(TextArea):
                         return
                 except Exception:
                     pass
+
         super()._on_key(event)

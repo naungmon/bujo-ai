@@ -139,18 +139,18 @@ TUTORIAL_TEXT = """
    >      migrate selected entry (carry it forward)
    Ctrl+Z undo last change
 
-4. DUMP MODE — AI-POWERED CAPTURE
-   Ctrl+D (from the TUI) opens dump mode.
+4. AI-POWERED CAPTURE
+   The main input is always AI-powered.
    Type freely, in full sentences, however messy.
    Hit Enter and AI sorts it into tasks, notes, events, priorities.
-   Shift+Enter for line breaks within a dump.
    Your raw text is always saved first — nothing is ever lost.
 
 5. VIEWS
    m  →  Monthly View (your 3-5 monthly priorities)
    f  →  Future View (parked items — not dead, not ready)
-   M  →  Migration Screen (review pending tasks, keep/kill/migrate)
-   Ctrl+B  →  Coach (insights for ADHD brains — best after 5+ entries)
+   Shift+M  →  Migration Screen (review pending tasks, keep/kill/migrate)
+   Shift+R  →  Monthly Review
+    Ctrl+B  →  Coach (insights for ADHD brains — best after 5+ entries)
    ?  →  This help screen
 
 6. SEARCH

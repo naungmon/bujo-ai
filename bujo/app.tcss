@@ -140,16 +140,6 @@ ListView:focus > ListItem.--highlight {
     width: 0;
 }
 
-/* ── Dump mode (hidden by default) ────────────────── */
-
-#dump-label {
-    display: none;
-}
-
-#dump-input {
-    display: none;
-}
-
 /* ── Secondary screens ─────────────────────────────── */
 
 #secondary-layout {
@@ -198,6 +188,8 @@ ListView:focus > ListItem.--highlight {
 #mig-list {
     height: 1fr;
     padding: 0 2;
+    border: none;
+    background: transparent;
 }
 
 /* ── Search screen ────────────────────────────────── */
@@ -208,6 +200,7 @@ ListView:focus > ListItem.--highlight {
 
 #search-input {
     margin: 1 2;
+    border: none;
 }
 
 #search-status {
@@ -226,4 +219,51 @@ ListView:focus > ListItem.--highlight {
 #search-results {
     height: auto;
     background: transparent;
+    border: none;
+}
+
+/* Secondary screens (monthly, future) */
+#secondary-layout {
+    padding: 1 2;
+}
+
+#secondary-title {
+    text-align: center;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#secondary-separator {
+    color: $text 30%;
+}
+
+#secondary-scroll {
+    height: 1fr;
+}
+
+#secondary-content {
+    padding: 0 1;
+}
+
+#secondary-hints {
+    dock: bottom;
+    height: 1;
+    padding: 0 1;
+}
+
+/* Inline add (monthly/future) */
+#add-label {
+    padding: 0 1;
+}
+
+#add-input {
+    margin: 0 1;
+    border: none;
+}
+
+/* Inline edit (daily) */
+#inline-edit {
+    border: none;
+    background: $surface;
+    padding: 0;
 }

@@ -312,6 +312,18 @@ class TestSaveDumpAndParse:
 # ---------------------------------------------------------------------------
 
 
+class TestValidSymbols:
+    def test_includes_scheduled(self):
+        """VALID_SYMBOLS must include < (scheduled) symbol."""
+        assert "<" in VALID_SYMBOLS
+
+    def test_includes_all_bujo_symbols(self):
+        """VALID_SYMBOLS must include all 8 BuJo symbols."""
+        from bujo.symbols import SYMBOLS
+        for sym in SYMBOLS:
+            assert sym in VALID_SYMBOLS, f"Missing symbol: {sym}"
+
+
 class TestAIParseError:
     def test_stores_raw_response(self):
         err = AIParseError("garbled response here")

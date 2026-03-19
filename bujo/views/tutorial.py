@@ -53,17 +53,18 @@ class TutorialScreen(Screen):
             "  Ctrl+Z → undo last change"
         ),
         (
-            "[bold]Dump mode — Ctrl+D[/bold]\n\n"
+            "[bold]AI-powered input[/bold]\n\n"
             "[dim]type freely, AI sorts it into entries[/dim]\n\n"
-            "Dump mode is for when you have messy, mixed-up thoughts.\n"
-            "Type it all out. Hit [bold]Enter[/bold] and BuJo parses it.\n\n"
-            "[dim]Shift+Enter for line breaks within a dump[/dim]"
+            "Just type. No prefix needed. AI figures out tasks vs notes.\n"
+            "Hit [bold]Enter[/bold] and BuJo parses your thought.\n\n"
+            "[dim]Use prefixes like t task, n note, * priority for explicit types[/dim]"
         ),
         (
             "[bold]Three views[/bold]\n\n"
             "  [cyan]m[/cyan]  → monthly priorities (3-5 things this month)\n"
             "  [cyan]f[/cyan]  → future log (parked, not dead)\n"
-            "  [cyan]M[/cyan]  → migration pass (review all pending tasks)\n\n"
+            "  [cyan]Shift+M[/cyan]  → migration pass (review all pending tasks)\n"
+            "  [cyan]Shift+R[/cyan]  → monthly review\n\n"
             "[dim italic]each serves a specific purpose in the system[/dim italic]"
         ),
         (

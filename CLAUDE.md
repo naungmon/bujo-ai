@@ -96,7 +96,8 @@ Press **Escape** to toggle between modes.
 | (launch) | DailyView | Main entry list, always-on input bar |
 | `m` | MonthlyView | Monthly priorities (3-5) |
 | `f` | FutureView | Parked items |
-| `M` | MigrationScreen | Review pending tasks |
+| `Shift+M` | MigrationScreen | Review pending tasks |
+| `Shift+R` | ReviewView | Monthly review |
 | `Ctrl+B` | Coach | Inline coaching (any key dismisses) |
 | `?` | HelpScreen | All keybindings |
 

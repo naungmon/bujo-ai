@@ -8,11 +8,12 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import ScrollableContainer, Vertical
 from textual.screen import Screen
-from textual.widgets import Static
-from textual import work
+from textual.widgets import Static, ListView, ListItem
+from textual import on, work
 
 from bujo.models import LogReader
-from bujo.vault import VAULT, DAILY, read_text_safe
+from bujo.vault import VAULT, DAILY, read_text_safe, get_future_items_for_month, append_entry, mark_future_entry_done
+from bujo.symbols import SYMBOL_DISPLAY
 
 
 class ReviewView(Screen):
@@ -27,6 +28,8 @@ class ReviewView(Screen):
         today = date.today()
         self._year = year if year else today.year
         self._month = month if month else today.month
+        self._future_items: list[str] = []
+        self._pulled_items: list[str] = []
 
     def compose(self) -> ComposeResult:
         month_name = date(self._year, self._month, 1).strftime("%B %Y")
@@ -37,6 +40,7 @@ class ReviewView(Screen):
                 Static("", id="review-content"),
                 id="secondary-scroll",
             )
+            yield Static("", id="future-section")
             yield Static(
                 "[dim italic]Escape to close[/dim italic]",
                 id="secondary-hints",
@@ -50,7 +54,8 @@ class ReviewView(Screen):
         content = self.query_one("#review-content", Static)
         content.update("[dim italic]loading entries...[/dim italic]")
 
-        # Gather all daily files for the month
+        self._load_future_log_section()
+
         journal_content = self._load_month_entries()
         if not journal_content.strip():
             content.update("[dim italic]no entries found for this month.[/dim italic]")
@@ -103,6 +108,25 @@ class ReviewView(Screen):
                 content.update(f"[red]Error: {e}[/red]")
         except Exception as e:
             content.update(f"[red]Review failed: {e}[/red]")
+
+    def _load_future_log_section(self) -> None:
+        """Show future log items for the review month."""
+        section = self.query_one("#future-section", Static)
+        self._future_items = get_future_items_for_month(self._year, self._month)
+
+        if not self._future_items:
+            section.update("")
+            return
+
+        display = SYMBOL_DISPLAY.get("<", "<")
+        items_markup = "\n".join(
+            f"  [blue]{display}[/blue] {item}" for item in self._future_items
+        )
+        section.update(
+            f"[bold cyan]From your future log[/bold cyan]\n"
+            f"{items_markup}\n"
+            f"[dim italic]pull: select item to schedule | done: mark completed[/dim italic]"
+        )
 
     def _load_month_entries(self) -> str:
         """Load all daily entries for self._year / self._month."""

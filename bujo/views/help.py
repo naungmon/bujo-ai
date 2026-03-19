@@ -41,9 +41,9 @@ class HelpScreen(Screen):
                     "[dim italic]views[/dim italic]\n"
                     "  m          monthly log\n"
                     "  f          future log\n"
-                    "  M          migration pass\n"
-                    "  Ctrl+B     coach\n"
-                    "  Ctrl+D     dump mode — Enter submits, Shift+Enter new line\n"
+                    "  Shift+M    migration pass\n"
+                    "  Shift+R    monthly review\n"
+                    "  Ctrl+B  coach\n"
                     "  ?          this screen\n"
                     "  q          quit\n\n"
                     "[dim italic]run [cyan]bujo tutorial[/cyan] for a step-by-step walkthrough[/dim italic]\n",

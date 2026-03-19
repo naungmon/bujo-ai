@@ -17,7 +17,8 @@ class MigrationScreen(Screen):
         Binding("escape,q", "app.pop_screen", "Back"),
         Binding(">", "keep", "Keep"),
         Binding("d", "kill", "Kill"),
-        Binding("f", "to_future", "Future"),
+        Binding("p", "to_future", "Future"),
+        Binding("t", "keep", "Keep"),
         Binding("up", "cursor_up", "Up"),
         Binding("down", "cursor_down", "Down"),
     ]
@@ -29,7 +30,7 @@ class MigrationScreen(Screen):
             yield Static("", id="mig-status")
             yield ListView(id="mig-list")
             yield Static(
-                "[dim italic]> keep \u00b7 d kill \u00b7 f future \u00b7 "
+                "[dim italic]> keep \u00b7 d kill \u00b7 p future \u00b7 t keep \u00b7 "
                 "\u2191\u2193 navigate \u00b7 Escape done[/dim italic]",
                 id="secondary-hints",
             )

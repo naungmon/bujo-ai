@@ -11,8 +11,14 @@ from bujo.symbols import (
 
 class TestSymbols:
     def test_all_symbols_defined(self):
-        expected = {"t", "x", ">", "k", "n", "e", "*"}
+        expected = {"t", "x", ">", "<", "k", "n", "e", "*"}
         assert set(SYMBOLS.keys()) == expected
+
+    def test_scheduled_symbol(self):
+        assert SYMBOLS["<"] == ("Scheduled", "Pulled from future log")
+        assert SYMBOL_DISPLAY["<"] == "\u2190"
+        assert SYMBOL_COLORS["<"] == "blue"
+        assert ENTRY_SORT_ORDER["<"] == 6
 
     def test_all_displays_defined(self):
         assert set(SYMBOL_DISPLAY.keys()) == set(SYMBOLS.keys())

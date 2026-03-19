@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from bujo.models import SYMBOL_DISPLAY, SYMBOLS
+from bujo.symbols import SYMBOLS, LEGACY_UNICODE_TO_ASCII
 
 
 def parse_quick_input(text: str) -> tuple[str, str]:
@@ -140,7 +140,7 @@ def apply_template(name: str, vault: Path) -> list[tuple[str, str]]:
                 break
         else:
             # Check legacy Unicode symbols
-            for display, sym in SYMBOL_DISPLAY.items():
+            for display, sym in LEGACY_UNICODE_TO_ASCII.items():
                 if stripped.startswith(display + " "):
                     text = stripped[len(display) + 1 :].strip()
                     entries.append((sym, text))

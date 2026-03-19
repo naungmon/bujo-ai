@@ -110,7 +110,7 @@ SYSTEM_PROMPT = (
     '{"symbol":"n","text":"feeling scattered today"}]'
 )
 
-VALID_SYMBOLS = {"t", "x", "n", "e", "*", "k", ">"}
+VALID_SYMBOLS = {"t", "x", "n", "e", "*", "k", ">", "<"}
 
 
 def parse_dump(text: str, api_key: str, model: str) -> list[tuple[str, str]]:

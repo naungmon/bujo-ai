@@ -73,6 +73,15 @@ class TestSmartParseFallback:
         assert result == []
 
 
+class TestPromptCompleteness:
+    def test_system_prompt_teaches_all_symbols(self):
+        """SYSTEM_PROMPT must mention all actionable BuJo symbols."""
+        from bujo.ai_capture import SYSTEM_PROMPT
+        # These symbols should be taught to the AI
+        for sym in ["t", "n", "e", "*", "k", "x", ">"]:
+            assert sym in SYSTEM_PROMPT, f"SYSTEM_PROMPT missing symbol: {sym}"
+
+
 class TestAIParseDump:
     def test_no_key_returns_none(self):
         import bujo.ai_capture as m

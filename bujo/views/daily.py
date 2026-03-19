@@ -12,9 +12,10 @@ from textual.binding import Binding
 from textual.containers import ScrollableContainer, Vertical, Horizontal
 from textual.reactive import reactive
 from textual.screen import Screen
-from textual.widgets import Input, ListView, Static, TextArea
+from textual.widgets import Input, ListView, Static
 from textual import events, on, work
 
+from bujo.ai_capture import has_explicit_prefix, smart_parse
 from bujo.models import LogReader, parse_entries
 from bujo.symbols import SYMBOLS, SYMBOL_DISPLAY, SYMBOL_COLORS, ENTRY_SORT_ORDER
 from bujo.vault import (
@@ -32,16 +33,14 @@ from bujo.widgets.date_ribbon import DateRibbon
 class DailyView(Screen):
     """Main daily log — modeless interaction, focus-based key handling."""
 
-    dump_mode = reactive(False)
-
     BINDINGS = [
         Binding("ctrl+b", "coach", "Coach"),
-        Binding("ctrl+d", "dump", "Dump"),
         Binding("ctrl+z", "undo", "Undo"),
         Binding("ctrl+delete", "clear_today", "Clear today"),
     ]
 
     _first_run_tour_pending: reactive[bool] = reactive(False)
+    _is_submitting: reactive[bool] = reactive(False)
 
     def compose(self) -> ComposeResult:
         with Vertical(id="daily-layout"):
@@ -64,11 +63,6 @@ class DailyView(Screen):
             with Horizontal(id="input-row"):
                 yield Static("[bold cyan]\u25b8 [/bold cyan]", id="input-prompt")
                 yield BuJoInput("", id="main-input", show_line_numbers=False)
-            # Dump mode (hidden initially)
-            yield Static(
-                "[dim italic]dump mode[/dim italic]", id="dump-label"
-            )
-            yield TextArea(id="dump-input")
 
     def on_mount(self) -> None:
         self._current_coach_mode = False
@@ -171,7 +165,7 @@ class DailyView(Screen):
                     count = len(self._pending_migration)
                     self.query_one("#count-label", Static).update(
                         f"[dim italic]{count} from yesterday · "
-                        f"> migrate · k kill · r keep[/dim italic]"
+                        f"> migrate · k kill · t keep[/dim italic]"
                     )
                     self._update_hint_bar_migration()
                     return
@@ -221,26 +215,22 @@ class DailyView(Screen):
         greeting.update(
             "[bold]BuJo \u2014 your ADHD journal[/bold]\n\n"
             f"[dim]vault ready at {VAULT}[/dim]\n\n"
-            "[dim]just start typing. prefix is optional:[/dim]\n"
+            "[bold cyan]Just type. AI figures it out.[/bold cyan]\n"
+            "[dim]No prefix needed. Type anything, hit Enter.[/dim]\n\n"
+            "[dim]Or use prefixes for explicit types:[/dim]\n"
             "[cyan]t[/cyan] or [cyan]task[/cyan]      \u2192 task\n"
-            "[magenta]e[/magenta] or [magenta]event[/magenta]     \u2192 event\n"
             "[white]n[/white] or [white]note[/white]      \u2192 note\n"
             "[red]*[/red] or [red]priority[/red]  \u2192 priority\n"
-            "[dim italic](no prefix)      \u2192 note[/dim italic]\n\n"
-            "[dim]anything with ! at the end becomes a priority.[/dim]\n\n"
+            "[magenta]e[/magenta] or [magenta]event[/magenta]     \u2192 event\n\n"
             "[dim]press any key for a 2-min tour \u00b7 Escape to skip[/dim]"
         )
 
     def _update_hint_bar(self) -> None:
         hint = self.query_one("#hint-bar", Static)
         hint.update(
-            "[dim]x done[/dim]  "
-            "[dim]k kill[/dim]  "
-            "[dim]> migrate[/dim]  "
-            "[dim][ ] days[/dim]  "
-            "[dim]/ search[/dim]  "
-            "[dim]? help[/dim]  "
-            "[dim]q quit[/dim]"
+            "[dim]type freely · AI parses · Enter submits[/dim]  "
+            "[dim]t task · n note · * priority · e event[/dim]  "
+            "[dim]Ctrl+B coach · ? help · q quit[/dim]"
         )
 
     def _update_hint_bar_migration(self) -> None:
@@ -248,7 +238,7 @@ class DailyView(Screen):
         hint.update(
             "[dim]> migrate[/dim]  "
             "[dim]k kill[/dim]  "
-            "[dim]r keep[/dim]  "
+            "[dim]t keep[/dim]  "
             "[dim]x done[/dim]  "
             "[dim]↑↓ navigate[/dim]"
         )
@@ -317,23 +307,53 @@ class DailyView(Screen):
     @work(thread=True)
     def _submit_new_entry(self, text: str) -> None:
         """Parse and save entry, running AI call in worker thread."""
+        if self._is_submitting:
+            return
+
         from bujo.ai_capture import smart_parse
 
-        # Show thinking indicator
-        def show_thinking():
+        def set_submitting():
+            self._is_submitting = True
             try:
-                self.query_one("#input-prompt", Static).update("[dim]thinking...[/dim]")
+                self.query_one("#input-prompt", Static).update("[yellow]AI thinking...[/yellow]")
             except Exception:
                 pass
-        self.app.call_from_thread(show_thinking)
+        self.app.call_from_thread(set_submitting)
 
-        entries_to_write = smart_parse(text)
+        try:
+            entries_to_write = smart_parse(text)
+        except Exception:
+            def reset_on_error():
+                self._is_submitting = False
+                try:
+                    self.query_one("#input-prompt", Static).update("[bold cyan]\u25b8 [/bold cyan]")
+                except Exception:
+                    pass
+                self.notify("AI error \u2014 saved as note", severity="warning", timeout=3)
+                append_entry("n", text)
+                self._load_day()
+                self._focus_input()
+            self.app.call_from_thread(reset_on_error)
+            return
 
         def finish():
             try:
-                self.query_one("#input-prompt", Static).update("[bold cyan]\u25b8 [/bold cyan]")
+                self.query_one("#input-prompt", Static).update("[bold cyan]▸ [/bold cyan]")
             except Exception:
                 pass
+            self._is_submitting = False
+
+            # Feedback on categorization
+            if len(entries_to_write) > 1:
+                symbols = [e[0] for e in entries_to_write]
+                self.notify(f"AI: {len(entries_to_write)} entries ({', '.join(symbols)})", timeout=2)
+            elif len(entries_to_write) == 1 and not has_explicit_prefix(text):
+                # Check why AI didn't split
+                from bujo.ai_capture import OPENROUTER_API_KEY
+                if not OPENROUTER_API_KEY:
+                    self.notify("No API key — saved as note (set BUJO_AI_KEY)", timeout=3, severity="warning")
+                else:
+                    self.notify(f"Saved as note ({entries_to_write[0][0]})", timeout=2)
 
             for symbol, cleaned in entries_to_write:
                 append_entry(symbol, cleaned)
@@ -366,6 +386,13 @@ class DailyView(Screen):
 
     # ── Inline editing ─────────────────────────────────
 
+    def _cancel_any_inline_edit(self) -> None:
+        """Cancel any in-progress inline edit."""
+        lv = self.query_one("#entry-list", BuJoListView)
+        for child in lv.children:
+            if isinstance(child, EntryItem) and child.is_editing:
+                child.cancel_edit()
+
     def _save_inline_edit(self, item: EntryItem, new_text: str) -> None:
         """Save an inline edit, updating the markdown file."""
         entry = item.entry
@@ -390,6 +417,7 @@ class DailyView(Screen):
 
         item.cancel_edit()
         self._load_day()
+        self._focus_input()
 
     # ── Status changes ─────────────────────────────────
 
@@ -448,7 +476,7 @@ class DailyView(Screen):
         engine = InsightsEngine(VAULT)
         reader = LogReader(VAULT)
         all_logs = reader.load_all()
-        total = sum(len(log.entries) for log in all_logs)
+        total = sum(len([e for e in log.entries if e.symbol != "<"]) for log in all_logs)
 
         self.app.call_from_thread(self._show_coach, engine, total)
 
@@ -520,92 +548,6 @@ class DailyView(Screen):
         self._load_day()
         self._focus_input()
 
-    # ── Dump mode ──────────────────────────────────────
-
-    def action_dump(self) -> None:
-        self._enter_dump_mode()
-
-    def _enter_dump_mode(self) -> None:
-        self.dump_mode = True
-        try:
-            self.query_one("#input-row", Horizontal).display = False
-        except Exception:
-            pass
-        try:
-            self.query_one("#dump-input", TextArea).display = True
-            self.query_one("#dump-label", Static).display = True
-            self.query_one("#dump-input", TextArea).focus()
-        except Exception:
-            pass
-
-    def _exit_dump_mode(self) -> None:
-        self.dump_mode = False
-        try:
-            self.query_one("#dump-input", TextArea).display = False
-            self.query_one("#dump-label", Static).display = False
-        except Exception:
-            pass
-        try:
-            self.query_one("#input-row", Horizontal).display = True
-        except Exception:
-            pass
-        self._focus_input()
-
-    @work(thread=True)
-    def _submit_dump(self) -> None:
-        from bujo.ai import save_dump_and_parse, get_ai_config
-
-        try:
-            text_area = self.query_one("#dump-input", TextArea)
-            text = text_area.text
-        except Exception:
-            return
-
-        if not text.strip():
-            self.app.call_from_thread(self._exit_dump_mode)
-            return
-
-        success, entries, err = save_dump_and_parse(text, VAULT)
-
-        if success:
-            type_map = {"t": "task", "n": "note", "e": "event", "*": "priority", "x": "done"}
-            lines = ["", f"[dim italic]parsed {len(entries)} entries:[/dim italic]", ""]
-            for sym, entry_text in entries:
-                d = SYMBOL_DISPLAY.get(sym, sym)
-                label = type_map.get(sym, sym)
-                lines.append(f"  {d} {entry_text}  [dim italic]{label}[/dim italic]")
-            inline_text = "\n".join(lines)
-
-            def show_result():
-                self._exit_dump_mode()
-                inline = self.query_one("#inline-display", Static)
-                inline.update(inline_text)
-                inline.display = True
-                self._load_day()
-
-            self.app.call_from_thread(show_result)
-        elif err == "no_key":
-            def show_key_error():
-                self._exit_dump_mode()
-                inline = self.query_one("#inline-display", Static)
-                inline.update(
-                    "[red]No API key set.[/red]\n\n"
-                    "[dim]Set BUJO_AI_KEY in your environment:\n"
-                    '  $env:BUJO_AI_KEY="sk-or-..."\n\n'
-                    "Get a key at openrouter.ai/keys[/dim]"
-                )
-                inline.display = True
-            self.app.call_from_thread(show_key_error)
-        else:
-            def show_other_error():
-                self._exit_dump_mode()
-                inline = self.query_one("#inline-display", Static)
-                inline.update(
-                    f"[red]Error: {err}[/red]\n[dim italic]Draft saved in log. Try: bujo dump --retry[/dim italic]"
-                )
-                inline.display = True
-            self.app.call_from_thread(show_other_error)
-
     # ── Clear today ────────────────────────────────────
 
     def action_clear_today(self) -> None:
@@ -653,31 +595,14 @@ class DailyView(Screen):
                 event.stop()
             return
 
-        # Dump mode
-        if self.dump_mode:
-            if event.key == "escape":
-                self._exit_dump_mode()
-                event.stop()
-                return
-            if event.key == "enter":
-                self._submit_dump()
-                event.stop()
-                return
-            return
-
         key = event.key
         inp = self.query_one("#main-input", BuJoInput)
         lv = self.query_one("#entry-list", BuJoListView)
 
         # ── Enter key disambiguation ──
         if key == "enter":
-            if inp.has_focus:
-                text = inp.text.strip()
-                if text:
-                    inp.load_text("")
-                    self._submit_new_entry(text)
-                event.stop()
-                return
+            # Note: Enter to submit text is handled in BuJoInput._on_key
+            # This only handles Enter when entry list has focus (inline edit)
             if lv.has_focus:
                 highlighted = lv.highlighted_child
                 if highlighted and isinstance(highlighted, EntryItem):
@@ -703,6 +628,9 @@ class DailyView(Screen):
 
         # ── Date navigation ──
         if key == "left_square_bracket":
+            self._cancel_any_inline_edit()
+            self._migration_mode = False
+            self._pending_migration = []
             ribbon = self.query_one("#date-ribbon", DateRibbon)
             ribbon.go_prev()
             # First nav hint
@@ -717,6 +645,9 @@ class DailyView(Screen):
             event.stop()
             return
         if key == "right_square_bracket":
+            self._cancel_any_inline_edit()
+            self._migration_mode = False
+            self._pending_migration = []
             ribbon = self.query_one("#date-ribbon", DateRibbon)
             ribbon.go_next()
             self._load_day()
@@ -731,6 +662,7 @@ class DailyView(Screen):
                     if target_date and isinstance(target_date, date):
                         self._set_viewing_date(target_date)
                         self._load_day()
+                    self._focus_input()
                 self.app.push_screen(SearchView(), callback=on_search_result)
                 event.stop()
                 return
@@ -750,7 +682,7 @@ class DailyView(Screen):
                         self._do_kill_pending()
                         event.stop()
                         return
-                    if key == "r":
+                    if key == "t":
                         self._do_keep_pending()
                         event.stop()
                         return
@@ -788,12 +720,12 @@ class DailyView(Screen):
             self.app.push_screen(MigrationScreen())
             event.stop()
             return
-        if key == "shift+r" and not inp.has_focus:
+        if key == "shift+r":
             from bujo.views.review import ReviewView
             self.app.push_screen(ReviewView())
             event.stop()
             return
-        if key == "question_mark" and not inp.has_focus:
+        if key == "question_mark":
             from bujo.views.help import HelpScreen
             self.app.push_screen(HelpScreen())
             event.stop()

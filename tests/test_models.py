@@ -45,6 +45,12 @@ class TestParseEntriesASCII:
         entries = self._parse("> call dentist")
         assert entries[0].symbol == ">"
 
+    def test_scheduled_less_than(self):
+        entries = self._parse("< call dentist")
+        assert entries[0].symbol == "<"
+        assert entries[0].text == "call dentist"
+        assert entries[0].type == "Scheduled"
+
     def test_killed(self):
         entries = self._parse("k old project")
         assert entries[0].symbol == "k"
@@ -224,6 +230,20 @@ class TestDayLog:
             ],
         )
         assert len(log.migrated) == 1
+
+    def test_scheduled_property(self):
+        log = DayLog(
+            date=date.today(),
+            path=Path("."),
+            entries=[
+                self._entry("<", "from future"),
+                self._entry("t", "task"),
+                self._entry("<", "another scheduled"),
+            ],
+        )
+        assert len(log.scheduled) == 2
+        assert log.scheduled[0].text == "from future"
+        assert log.scheduled[1].text == "another scheduled"
 
     def test_events_property(self):
         log = DayLog(
