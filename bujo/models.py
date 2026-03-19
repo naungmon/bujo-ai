@@ -4,37 +4,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
-# ASCII symbols stored in markdown files
-SYMBOLS = {
-    "t": ("Task", "Something to do"),
-    "x": ("Done", "Completed"),
-    ">": ("Migrated", "Moved forward"),
-    "k": ("Killed", "Consciously dropped"),
-    "n": ("Note", "Thought or observation"),
-    "e": ("Event", "Happened or scheduled"),
-    "*": ("Priority", "This one matters today"),
-}
-
-# TUI display symbols (Unicode render)
-SYMBOL_DISPLAY = {
-    "t": "\u00b7",  # · task
-    "x": "\u00d7",  # × done
-    ">": ">",  # > migrated
-    "k": "~",  # ~ killed
-    "n": "\u2013",  # – note
-    "e": "\u25cb",  # ○ event
-    "*": "\u2605",  # ★ priority
-}
-
-# Legacy Unicode -> ASCII mapping for backward compatibility
-LEGACY_UNICODE_TO_ASCII = {
-    "\u00b7": "t",  # · -> t
-    "\u00d7": "x",  # × -> x
-    "~": "k",  # ~ -> k
-    "\u2013": "n",  # – -> n
-    "\u25cb": "e",  # ○ -> e
-    "\u2605": "*",  # ★ -> *
-}
+from bujo.symbols import SYMBOLS, SYMBOL_DISPLAY, LEGACY_UNICODE_TO_ASCII
 
 
 @dataclass
@@ -73,6 +43,10 @@ class DayLog:
     @property
     def migrated(self) -> list[Entry]:
         return [e for e in self.entries if e.symbol == ">"]
+
+    @property
+    def events(self) -> list[Entry]:
+        return [e for e in self.entries if e.symbol == "e"]
 
     @property
     def completion_rate(self) -> float:

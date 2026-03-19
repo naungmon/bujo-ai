@@ -424,3 +424,301 @@ class TestMostProductiveTime:
         result = engine.most_productive_time()
         # Should return a bucket name (depends on file mtime)
         assert any(b in result for b in ["morning", "afternoon", "evening", "late"])
+
+
+# ---------------------------------------------------------------------------
+# stall_duration
+# ---------------------------------------------------------------------------
+
+
+class TestStallDuration:
+    def test_task_with_history(self, tmp_path):
+        vault = _create_vault(
+            tmp_path,
+            {
+                "2026-03-10.md": _make_log_content("t gym session"),
+                "2026-03-11.md": _make_log_content("t gym session"),
+                "2026-03-12.md": _make_log_content("k 2026-03-12 gym session"),
+            },
+        )
+        engine = InsightsEngine(vault)
+        result = engine.stall_duration("2026-03-12 gym session")
+        assert result == 2
+
+    def test_task_never_seen_as_t(self, tmp_path):
+        vault = _create_vault(
+            tmp_path,
+            {
+                "2026-03-12.md": _make_log_content("k 2026-03-12 random idea"),
+            },
+        )
+        engine = InsightsEngine(vault)
+        result = engine.stall_duration("2026-03-12 random idea")
+        assert result is None
+
+    def test_killed_same_day_no_prior_t(self, tmp_path):
+        vault = _create_vault(
+            tmp_path,
+            {
+                "2026-03-12.md": _make_log_content("k 2026-03-12 quick drop"),
+            },
+        )
+        engine = InsightsEngine(vault)
+        result = engine.stall_duration("2026-03-12 quick drop")
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# stall_stats
+# ---------------------------------------------------------------------------
+
+
+class TestStallStats:
+    def test_overall_stats(self, tmp_path):
+        vault = _create_vault(
+            tmp_path,
+            {
+                "2026-03-10.md": _make_log_content("t gym session"),
+                "2026-03-12.md": _make_log_content("k 2026-03-12 gym session"),
+                "2026-03-14.md": _make_log_content("t reading book"),
+                "2026-03-17.md": _make_log_content("k 2026-03-17 reading book"),
+            },
+        )
+        engine = InsightsEngine(vault)
+        stats = engine.stall_stats()
+        assert stats["count"] == 2
+        assert stats["avg"] == 2.5
+        assert stats["max"] == 3
+
+    def test_filter_by_theme(self, tmp_path):
+        vault = _create_vault(
+            tmp_path,
+            {
+                "2026-03-10.md": _make_log_content("t gym session"),
+                "2026-03-12.md": _make_log_content("k 2026-03-12 gym session"),
+                "2026-03-14.md": _make_log_content("t reading book"),
+                "2026-03-17.md": _make_log_content("k 2026-03-17 reading book"),
+            },
+        )
+        engine = InsightsEngine(vault)
+        gym_stats = engine.stall_stats(theme="gym")
+        assert gym_stats["count"] == 1
+        assert gym_stats["avg"] == 2.0
+
+    def test_empty_vault(self, tmp_path):
+        vault = _create_vault(tmp_path, {})
+        engine = InsightsEngine(vault)
+        stats = engine.stall_stats()
+        assert stats == {"avg": 0.0, "median": 0.0, "max": 0, "count": 0}
+
+    def test_no_kill_dates(self, tmp_path):
+        vault = _create_vault(
+            tmp_path,
+            {
+                "2026-03-12.md": _make_log_content("k just dropped"),
+            },
+        )
+        engine = InsightsEngine(vault)
+        stats = engine.stall_stats()
+        assert stats["count"] == 0
+
+
+# ---------------------------------------------------------------------------
+# event_density_mapping
+# ---------------------------------------------------------------------------
+
+
+class TestEventDensityMapping:
+    def test_buckets_reflect_event_counts(self, tmp_path):
+        today = date.today()
+        files = {}
+        d0 = today - timedelta(days=0)
+        d1 = today - timedelta(days=1)
+        files[f"{d0.isoformat()}.md"] = _make_log_content("t task")
+        files[f"{d1.isoformat()}.md"] = _make_log_content("t task", "e meeting", "x done")
+        d2 = today - timedelta(days=2)
+        files[f"{d2.isoformat()}.md"] = _make_log_content(
+            "e meeting", "e dinner", "t task", "x done"
+        )
+        d3 = today - timedelta(days=3)
+        files[f"{d3.isoformat()}.md"] = _make_log_content(
+            "e a", "e b", "e c", "e d", "t task"
+        )
+        vault = _create_vault(tmp_path, files)
+        engine = InsightsEngine(vault)
+        result = engine.event_density_mapping()
+        # All 30 days are bucketed; only the 4 days with files matter
+        # day 0: 0 events → low, day 1: 1 event → low, day 2: 2 events → medium, day 3: 4 events → high
+        assert result["high"]["completion_rate"] == 0.0
+
+    def test_empty_vault_returns_low_bucket(self, tmp_path):
+        vault = _create_vault(tmp_path, {})
+        engine = InsightsEngine(vault)
+        result = engine.event_density_mapping()
+        # All 30 days have 0 events → all low
+        assert result["low"]["days"] == 30
+
+
+# ---------------------------------------------------------------------------
+# event_heavy_day_nudge
+# ---------------------------------------------------------------------------
+
+
+class TestEventHeavyDayNudge:
+    def test_triggers_on_3plus_events_zero_done(self, tmp_path):
+        today = date.today()
+        files = {}
+        d = today - timedelta(days=1)
+        files[f"{d.isoformat()}.md"] = _make_log_content(
+            "e meeting", "e lunch", "e dinner", "t pending"
+        )
+        vault = _create_vault(tmp_path, files)
+        engine = InsightsEngine(vault)
+        nudge = engine.event_heavy_day_nudge()
+        assert nudge is not None
+        assert "overcommit" in nudge.lower()
+
+    def test_no_nudge_when_done_exists(self, tmp_path):
+        today = date.today()
+        files = {}
+        d = today - timedelta(days=1)
+        files[f"{d.isoformat()}.md"] = _make_log_content(
+            "e meeting", "e lunch", "x done"
+        )
+        vault = _create_vault(tmp_path, files)
+        engine = InsightsEngine(vault)
+        nudge = engine.event_heavy_day_nudge()
+        assert nudge is None
+
+
+# ---------------------------------------------------------------------------
+# note_density
+# ---------------------------------------------------------------------------
+
+
+class TestNoteDensity:
+    def test_note_counts_and_heavy_flag(self, tmp_path):
+        today = date.today()
+        files = {}
+        d1 = today - timedelta(days=0)
+        d2 = today - timedelta(days=1)
+        files[f"{d1.isoformat()}.md"] = _make_log_content(
+            "n note1", "n note2", "n note3", "n note4", "n note5", "t task"
+        )
+        files[f"{d2.isoformat()}.md"] = _make_log_content("n note1", "t task")
+        vault = _create_vault(tmp_path, files)
+        engine = InsightsEngine(vault)
+        result = engine.note_density()
+        heavy = [r for r in result if r["heavy"]]
+        assert len(heavy) == 1
+
+    def test_empty_vault(self, tmp_path):
+        vault = _create_vault(tmp_path, {})
+        engine = InsightsEngine(vault)
+        result = engine.note_density()
+        assert len(result) == 14
+
+
+# ---------------------------------------------------------------------------
+# note_heavy_days
+# ---------------------------------------------------------------------------
+
+
+class TestNoteHeavyDays:
+    def test_returns_heavy_days_sorted(self, tmp_path):
+        today = date.today()
+        files = {}
+        d1 = today - timedelta(days=0)
+        d2 = today - timedelta(days=1)
+        d3 = today - timedelta(days=2)
+        files[f"{d1.isoformat()}.md"] = _make_log_content(
+            "n a", "n b", "n c", "n d", "n e"
+        )
+        files[f"{d2.isoformat()}.md"] = _make_log_content(
+            "n a", "n b", "n c", "n d", "n e", "n f", "n g"
+        )
+        files[f"{d3.isoformat()}.md"] = _make_log_content("n one")
+        vault = _create_vault(tmp_path, files)
+        engine = InsightsEngine(vault)
+        heavy = engine.note_heavy_days()
+        assert len(heavy) == 2
+        assert heavy[0]["count"] == 7
+        assert heavy[1]["count"] == 5
+
+
+# ---------------------------------------------------------------------------
+# coaching_nudge — event overcommit and note dump
+# ---------------------------------------------------------------------------
+
+
+class TestCoachingNudgeNewBranches:
+    def test_event_overcommit_nudge(self, tmp_path):
+        today = date.today()
+        files = {}
+        for i in range(3):
+            d = today - timedelta(days=i)
+            entries = ["e a", "e b", "e c", "t pending"]
+            files[f"{d.isoformat()}.md"] = "\n".join(entries)
+        vault = _create_vault(tmp_path, files)
+        engine = InsightsEngine(vault)
+        nudge = engine.coaching_nudge()
+        assert "overcommit" in nudge.lower()
+
+    def test_note_dump_nudge(self, tmp_path):
+        today = date.today()
+        files = {}
+        for i in range(3):
+            d = today - timedelta(days=i)
+            notes = "\n".join([f"n note{j}" for j in range(6)])
+            files[f"{d.isoformat()}.md"] = notes
+        vault = _create_vault(tmp_path, files)
+        engine = InsightsEngine(vault)
+        nudge = engine.coaching_nudge()
+        assert "note" in nudge.lower() or "dump" in nudge.lower()
+
+    def test_stall_duration_in_nudge(self, tmp_path):
+        vault = _create_vault(
+            tmp_path,
+            {
+                "2026-03-10.md": _make_log_content("t gym session"),
+                "2026-03-11.md": _make_log_content("t gym session"),
+                "2026-03-12.md": _make_log_content("k 2026-03-12 gym session"),
+                "2026-03-13.md": _make_log_content("t gym session"),
+                "2026-03-14.md": _make_log_content("k 2026-03-14 gym session"),
+                "2026-03-15.md": _make_log_content("t gym session"),
+                "2026-03-16.md": _make_log_content("k 2026-03-16 gym session"),
+            },
+        )
+        engine = InsightsEngine(vault)
+        nudge = engine.coaching_nudge()
+        assert "gym" in nudge.lower()
+
+
+# ---------------------------------------------------------------------------
+# full_report — new keys
+# ---------------------------------------------------------------------------
+
+
+class TestFullReportNewKeys:
+    def test_includes_stall_and_event_keys(self, tmp_path):
+        today = date.today()
+        files = {}
+        d = today - timedelta(days=0)
+        files[f"{d.isoformat()}.md"] = _make_log_content("t task", "x done")
+        vault = _create_vault(tmp_path, files)
+        engine = InsightsEngine(vault)
+        report = engine.full_report()
+        assert "avg_stall_days" in report
+        assert "event_density_mapping" in report
+        assert "note_heavy_days_14d" in report
+
+    def test_event_density_mapping_structure(self, tmp_path):
+        vault = _create_vault(tmp_path, {})
+        engine = InsightsEngine(vault)
+        report = engine.full_report()
+        mapping = report["event_density_mapping"]
+        assert "low" in mapping
+        assert "medium" in mapping
+        assert "high" in mapping
+        assert "days" in mapping["low"]
+        assert "completion_rate" in mapping["low"]

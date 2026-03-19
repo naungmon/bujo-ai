@@ -225,6 +225,20 @@ class TestDayLog:
         )
         assert len(log.migrated) == 1
 
+    def test_events_property(self):
+        log = DayLog(
+            date=date.today(),
+            path=Path("."),
+            entries=[
+                self._entry("e", "meeting at 3pm"),
+                self._entry("t", "task"),
+                self._entry("e", "dinner"),
+            ],
+        )
+        assert len(log.events) == 2
+        assert log.events[0].text == "meeting at 3pm"
+        assert log.events[1].text == "dinner"
+
     def test_completion_rate_full(self):
         log = DayLog(
             date=date.today(),
@@ -305,14 +319,14 @@ class TestLogReader:
         assert log.path == vault / "daily" / "2026-03-16.md"
 
     def test_load_range_skips_missing(self, tmp_path):
-        vault = self._create_vault(tmp_path, {"2026-03-16.md": "t buy milk"})
+        from datetime import date, timedelta
+        vault = self._create_vault(tmp_path, {})
+        today = date.today()
+        recent_file = (today - timedelta(days=1)).isoformat()
+        (vault / "daily" / f"{recent_file}.md").write_text("t buy milk\n", encoding="utf-8")
         reader = LogReader(vault)
-        # Range of 3 days ending today — most will be missing
-        from datetime import date as d
-
         logs = reader.load_range(3)
         assert len(logs) == 3
-        # Only today's should have entries
         total_entries = sum(len(l.entries) for l in logs)
         assert total_entries == 1
 
