@@ -70,9 +70,12 @@ def main() -> None:
         def save_and_close(event=None):
             text = entry.get().strip()
             if text:
-                symbol, cleaned = parse_quick_input(text)
-                append_entry(symbol, cleaned)
-                print(f"  Captured: {cleaned}")
+                try:
+                    symbol, cleaned = parse_quick_input(text)
+                    append_entry(symbol, cleaned)
+                    print(f"  Captured: {cleaned}")
+                except Exception as e:
+                    print(f"  Error: {e}")
             root.destroy()
 
         def cancel(event=None):

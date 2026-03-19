@@ -1,6 +1,7 @@
 """Obsidian integration for BuJo."""
 
 import os
+from datetime import datetime
 from pathlib import Path
 
 
@@ -103,7 +104,3 @@ def generate_dashboard(vault: Path, engine) -> None:
 
     dashboard = vault / "dashboard.md"
     dashboard.write_text("\n".join(lines), encoding="utf-8")
-
-
-# Need datetime for dashboard timestamp
-from datetime import datetime

@@ -16,6 +16,7 @@ from bujo.ai import (
     get_ai_config,
     show_setup_instructions,
     SYSTEM_PROMPT,
+    INJECTION_GUARD,
     VALID_SYMBOLS,
 )
 
@@ -35,13 +36,13 @@ class TestGetAIConfig:
         monkeypatch.setenv("BUJO_AI_KEY", "sk-or-test")
         monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
         result = get_ai_config()
-        assert result == ("sk-or-test", "minimax/minimax-m2.5")
+        assert result == ("sk-or-test", "minimax/minimax-m2.7")
 
     def test_with_openrouter_fallback(self, monkeypatch):
         monkeypatch.delenv("BUJO_AI_KEY", raising=False)
         monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-fallback")
         result = get_ai_config()
-        assert result == ("sk-or-fallback", "minimax/minimax-m2.5")
+        assert result == ("sk-or-fallback", "minimax/minimax-m2.7")
 
     def test_bujo_key_takes_priority(self, monkeypatch):
         monkeypatch.setenv("BUJO_AI_KEY", "sk-or-primary")
@@ -178,7 +179,7 @@ class TestParseDump:
         call_kwargs = mock_post.call_args
         assert call_kwargs[1]["headers"]["Authorization"] == "Bearer sk-test-key"
         assert call_kwargs[1]["json"]["model"] == "my-model"
-        assert call_kwargs[1]["json"]["messages"][1]["content"] == "my dump text"
+        assert call_kwargs[1]["json"]["messages"][1]["content"] == INJECTION_GUARD + "my dump text"
         assert call_kwargs[1]["json"]["messages"][0]["content"] == SYSTEM_PROMPT
 
 
@@ -193,7 +194,7 @@ class TestSaveDumpAndParse:
         daily = vault / "daily"
         daily.mkdir()
 
-        with patch("bujo.app.today_path") as mock_today_path:
+        with patch("bujo.ai.today_path") as mock_today_path:
             today_file = daily / "2026-03-16.md"
             today_file.write_text("# March 16\n\n", encoding="utf-8")
             mock_today_path.return_value = today_file
@@ -211,7 +212,7 @@ class TestSaveDumpAndParse:
         daily = vault / "daily"
         daily.mkdir()
 
-        with patch("bujo.app.today_path") as mock_today_path:
+        with patch("bujo.ai.today_path") as mock_today_path:
             today_file = daily / "2026-03-16.md"
             today_file.write_text("# March 16\n\n", encoding="utf-8")
             mock_today_path.return_value = today_file
@@ -230,7 +231,7 @@ class TestSaveDumpAndParse:
         daily.mkdir()
         mock_post.side_effect = requests.ConnectionError("no connection")
 
-        with patch("bujo.app.today_path") as mock_today_path:
+        with patch("bujo.ai.today_path") as mock_today_path:
             today_file = daily / "2026-03-16.md"
             today_file.write_text("# March 16\n\n", encoding="utf-8")
             mock_today_path.return_value = today_file
@@ -254,7 +255,7 @@ class TestSaveDumpAndParse:
             raise_for_status=MagicMock(),
         )
 
-        with patch("bujo.app.today_path") as mock_today_path:
+        with patch("bujo.ai.today_path") as mock_today_path:
             today_file = daily / "2026-03-16.md"
             today_file.write_text("# March 16\n\n", encoding="utf-8")
             mock_today_path.return_value = today_file
@@ -285,15 +286,15 @@ class TestSaveDumpAndParse:
         mock_resp.status_code = 200
         mock_post.return_value = mock_resp
 
-        with patch("bujo.app.today_path") as mock_today_path:
-            today_file = daily / "2026-03-16.md"
-            today_file.write_text("# March 16\n\n", encoding="utf-8")
-            mock_today_path.return_value = today_file
+        today_file = daily / "2026-03-16.md"
+        today_file.write_text("# March 16\n\n", encoding="utf-8")
 
-            with patch("bujo.ai.get_ai_config", return_value=("sk-test", "model")):
-                success, entries, err = save_dump_and_parse(
-                    "need to call jackson, feeling scattered", vault
-                )
+        with patch("bujo.ai.today_path", return_value=today_file), \
+             patch("bujo.vault.today_path", return_value=today_file), \
+             patch("bujo.ai.get_ai_config", return_value=("sk-test", "model")):
+            success, entries, err = save_dump_and_parse(
+                "need to call jackson, feeling scattered", vault
+            )
 
         assert success is True
         assert len(entries) == 2

@@ -12,13 +12,6 @@ Screen {
 
 /* ── Header area ───────────────────────────────────── */
 
-#date-label {
-    height: 1;
-    color: $text;
-    text-style: bold;
-    padding: 1 2 0 2;
-}
-
 #greeting-label {
     height: auto;
     color: $text-muted;
@@ -37,12 +30,31 @@ Screen {
     padding: 0 2;
 }
 
+/* ── Date ribbon ──────────────────────────────────── */
+
+#date-ribbon {
+    height: 1;
+    color: $text;
+    text-style: bold;
+    padding: 1 2 0 2;
+}
+
+/* ── Past-day indicator ──────────────────────────── */
+
+#past-day-indicator {
+    height: auto;
+    color: $warning;
+    padding: 0 2;
+}
+
 /* ── Entry list ────────────────────────────────────── */
 
 #entry-scroll {
     height: 1fr;
     min-height: 0;
     padding: 0 2;
+    border: none;
+    background: transparent;
 }
 
 #entry-list {
@@ -51,7 +63,7 @@ Screen {
 }
 
 ListView > ListItem {
-    height: 1;
+    height: auto;
     background: transparent;
     padding: 0 0;
 }
@@ -61,7 +73,7 @@ ListView > ListItem.--highlight {
 }
 
 ListView:focus > ListItem.--highlight {
-    background: $primary-darken-2;
+    background: $primary-darken-1;
 }
 
 /* ── Empty state ───────────────────────────────────── */
@@ -75,45 +87,72 @@ ListView:focus > ListItem.--highlight {
 /* ── Inline coach display ──────────────────────────── */
 
 #inline-display {
+    display: none;
     height: 1fr;
     padding: 1 2;
     color: $text;
     overflow-y: auto;
 }
 
-/* ── Hint bar ──────────────────────────────────────── */
+/* ── Hint bar (nav mode only) ──────────────────────── */
 
 #hint-bar {
-    height: 1;
+    display: none;
+    height: auto;
+    min-height: 1;
     color: $text-disabled;
-    padding: 1 2 0 2;
+    padding: 0 2;
+    margin-bottom: 1;
 }
 
 /* ── Input area ────────────────────────────────────── */
 
 #input-row {
-    height: 3;
+    height: auto;
+    padding: 0 2;
+    margin-bottom: 2;
 }
 
 #input-prompt {
-    height: 1;
+    width: auto;
+    height: auto;
     color: $primary;
     text-style: bold;
-    padding: 0 2;
 }
 
 #main-input {
-    height: 3;
-    border: tall $primary-darken-3;
-    background: $surface;
-    padding: 0 2;
+    width: 1fr;
+    height: auto;
+    min-height: 1;
+    max-height: 4;
+    border: none;
+    background: transparent;
+    padding: 0;
+    margin: 0;
     color: $text;
+}
+
+#main-input .text-area--cursor {
+    background: white;
+}
+
+#main-input .text-area--gutter {
+    width: 0;
+}
+
+/* ── Dump mode (hidden by default) ────────────────── */
+
+#dump-label {
+    display: none;
+}
+
+#dump-input {
+    display: none;
 }
 
 /* ── Secondary screens ─────────────────────────────── */
 
 #secondary-layout {
-    padding: 1 2;
     height: 100%;
 }
 
@@ -121,36 +160,70 @@ ListView:focus > ListItem.--highlight {
     height: 1;
     color: $text;
     text-style: bold;
-    margin-bottom: 1;
+    padding: 1 2 0 2;
 }
 
 #secondary-separator {
     height: 1;
     color: $primary-darken-3;
-    margin-bottom: 1;
+    padding: 0 2;
 }
 
 #secondary-content {
-    height: 1fr;
-    color: $text-muted;
+    height: auto;
+    color: $text;
+    padding: 1 2;
 }
 
 #secondary-scroll {
     height: 1fr;
+    padding: 0 2;
+    border: none;
+    background: transparent;
 }
 
 #secondary-hints {
     height: 1;
     color: $text-disabled;
-    margin-top: 1;
+    padding: 0 2;
+    margin-bottom: 3;
 }
 
 #mig-status {
     height: 1;
     color: $text-disabled;
-    margin-bottom: 1;
+    padding: 0 2;
 }
 
 #mig-list {
     height: 1fr;
+    padding: 0 2;
+}
+
+/* ── Search screen ────────────────────────────────── */
+
+#search-layout {
+    height: 100%;
+}
+
+#search-input {
+    margin: 1 2;
+}
+
+#search-status {
+    height: auto;
+    color: $text-disabled;
+    padding: 0 2;
+}
+
+#search-scroll {
+    height: 1fr;
+    padding: 0 2;
+    border: none;
+    background: transparent;
+}
+
+#search-results {
+    height: auto;
+    background: transparent;
 }

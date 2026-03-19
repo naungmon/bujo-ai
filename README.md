@@ -25,7 +25,7 @@ $env:BUJO_AI_KEY="sk-or-your-key-here"
 export BUJO_AI_KEY=sk-or-your-key-here
 ```
 
-Default model: minimax/minimax-m2.5
+Default model: minimax/minimax-m2.7
 Override: set BUJO_AI_MODEL to any OpenRouter model string.
 
 ### Usage
@@ -53,6 +53,8 @@ pip install -e .
 ```
 
 ## Quick Start
+
+**First launch:** a prefix guide appears. Press any key for a 2-minute tour, or Escape to skip. Replay anytime with `bujo tutorial`.
 
 ```
 $ bujo
@@ -95,8 +97,8 @@ The `▸` prompt is your anchor. Everything else is dim.
 **Nav mode** — `▸` dimmed. You're reviewing. Arrow through entries and
 update them.
 
-Press **Escape** to toggle between modes. That's the only key you need
-to remember.
+Press **Escape** to cancel an inline edit and return to capture mode.
+When not editing, Escape focuses the input bar so you can immediately type.
 
 ### Nav mode actions
 
@@ -106,7 +108,8 @@ to remember.
 | `x` | Mark selected done |
 | `k` | Kill selected |
 | `>` | Migrate selected |
-| `r` | Retype (edit entry text) |
+| `Ctrl+Z` | Undo last change |
+| `Ctrl+Delete` | Clear all entries today |
 
 ### Prefix system
 
@@ -145,6 +148,7 @@ They came back to update what happened. The app knows that.
 | `M` | MigrationScreen | Review pending tasks |
 | `Ctrl+B` | Coach | Inline coaching (any key dismisses) |
 | `Ctrl+D` | Dump mode | AI-powered free-form capture |
+| `/` | SearchView | Full vault search |
 | `?` | HelpScreen | Keybinding reference |
 
 ## CLI Commands
@@ -152,9 +156,14 @@ They came back to update what happened. The app knows that.
 | Command | Description |
 |---------|-------------|
 | `bujo` | Launch TUI |
+| `bujo tutorial` | Step-by-step walkthrough |
 | `bujo add t\|n\|*\|e\|x\|k "text"` | Add entry (ASCII symbol) |
 | `bujo capture "text"` | NLP auto-detect and add |
+| `bujo dump "text"` | AI parse dump and save |
+| `bujo dump` | Multiline dump mode |
+| `bujo dump --retry` | Re-parse saved drafts |
 | `bujo log` | Print today's log |
+| `bujo summary` | Print 7-day logs summary |
 | `bujo coach` | JSON for AI coaching |
 | `bujo coach --human` | Readable coaching output |
 | `bujo insights` | Analytics dashboard |
@@ -162,9 +171,6 @@ They came back to update what happened. The app knows that.
 | `bujo streak` | Current streak count |
 | `bujo template morning` | Apply template |
 | `bujo vault` | Print vault path |
-| `bujo dump "text"` | AI parse dump and save |
-| `bujo dump` | Multiline dump mode |
-| `bujo dump --retry` | Re-parse saved drafts |
 
 ## Symbol System
 
@@ -229,7 +235,7 @@ productive time, and top insight.
 Capture entries from anywhere with `Win+Shift+B`:
 
 ```bash
-pip install bujo-cli[hotkey]  # install keyboard dependency
+pip install bujo-ai[hotkey]  # install keyboard dependency
 bujo-capture              # start hotkey listener
 ```
 
@@ -249,32 +255,7 @@ export BUJO_DASHBOARD=1
 
 Both are opt-in. BuJo writes standard markdown that Obsidian reads natively.
 
-## Claude Code Integration
-
-Copy `.claude/` to your home directory:
-
-```bash
-cp -r .claude ~/
-```
-
-In any Claude Code session, type `/bujo` to get a coaching synthesis based on
-your logs. Claude runs `bujo coach`, analyzes patterns, and asks one honest
-question.
-
-## KiloCode / Cursor / Windsurf (manual)
-
-Copy `.kilocode/` to your home directory:
-
-```bash
-cp -r .kilocode ~/
-```
-
-For Windsurf or Cursor, add the contents of `.kilocode/commands/bujo.md` to
-your system prompt or `.cursorrules`.
-
 ## Vault Structure
-
-All data lives in `~/bujo-vault/` by default:
 
 ```
 ~/bujo-vault/
@@ -296,8 +277,12 @@ export BUJO_VAULT=/path/to/your/obsidian/vault/bujo
 | Variable | Purpose | Default |
 |----------|---------|---------|
 | `BUJO_VAULT` | Vault location | `~/bujo-vault/` |
+| `BUJO_AI_KEY` | OpenRouter API key | _(none — required for AI features)_ |
+| `OPENROUTER_API_KEY` | OpenRouter key (fallback) | _(none)_ |
+| `BUJO_AI_MODEL` | OpenRouter model | `minimax/minimax-m2.7` |
 | `BUJO_OBSIDIAN_FRONTMATTER` | Add YAML frontmatter | off |
 | `BUJO_DASHBOARD` | Generate dashboard.md | off |
+| `BUJO_DEBUG` | Write AI debug log to vault | off |
 | `EDITOR` / `VISUAL` | Editor for raw editing | notepad (Win) / nano |
 
 ## Contributing

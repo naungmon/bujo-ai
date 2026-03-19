@@ -19,12 +19,22 @@ Usage:
     bujo template name        Apply template to today's log
     bujo streak               Show current streak
     bujo vault                Print vault path
+    bujo tutorial             Step-by-step walkthrough
     bujo help                 Show usage
 """
 
+import io
 import sys
 import json
 import os
+from typing import cast
+
+
+def _reconfigure_stdout() -> None:
+    try:
+        cast(io.TextIOWrapper, sys.stdout).reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 
 
 def _print_coach_human(report: dict) -> None:
@@ -91,6 +101,79 @@ def _print_dump_entries(entries: list[tuple[str, str]]) -> None:
         print(f"  {d} {text}")
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+TUTORIAL_TEXT = """
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  BuJo — 2-Minute Tour
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. THE VAULT
+   Your journal lives in ~/bujo-vault/ as plain markdown files.
+   Open it in Obsidian, VS Code, or any text editor.
+   Every day = one file in daily/. Back it up like any important file.
+
+2. PREFIX SETS THE TYPE
+   Start any line with a prefix to set its type:
+   ┌────────────────────────────────────────────────────────────────────────┐
+   │  t / task      →  task (something to do)                              │
+   │  n / note      →  note (thought, observation)                         │
+   │  e / event     →  event (scheduled or happened)                       │
+   │  * / priority  →  priority (urgent or important)                      │
+   │  x / done      →  done                                                │
+   │  k / kill      →  killed (consciously dropped)                        │
+   │  >             →  migrated (carrying forward)                          │
+   │  (no prefix)   →  note                                               │
+   └────────────────────────────────────────────────────────────────────────┘
+   Examples:  t call jackson       note feeling tired today
+              * finish report       done wrote tests
+              k that idea           event standup at 9
+
+   Priority shortcut: add ! at the end of any line → becomes priority.
+   Examples:  finish this report!    k that meeting!
+
+3. NAVIGATE + UPDATE
+   ↑↓  Move between the input bar and your entry list
+   Enter  submit (in input) or edit (on an entry)
+   x      mark selected entry as done
+   k      kill selected entry (drop it consciously)
+   >      migrate selected entry (carry it forward)
+   Ctrl+Z undo last change
+
+4. DUMP MODE — AI-POWERED CAPTURE
+   Ctrl+D (from the TUI) opens dump mode.
+   Type freely, in full sentences, however messy.
+   Hit Enter and AI sorts it into tasks, notes, events, priorities.
+   Shift+Enter for line breaks within a dump.
+   Your raw text is always saved first — nothing is ever lost.
+
+5. VIEWS
+   m  →  Monthly View (your 3-5 monthly priorities)
+   f  →  Future View (parked items — not dead, not ready)
+   M  →  Migration Screen (review pending tasks, keep/kill/migrate)
+   Ctrl+B  →  Coach (insights for ADHD brains — best after 5+ entries)
+   ?  →  This help screen
+
+6. SEARCH
+   /  opens full-text search across all your days.
+   Useful for finding patterns, old notes, recurring tasks.
+
+7. CLI COMMANDS
+   bujo                   launch TUI
+   bujo capture "text"    NLP parse (prefix auto-detected)
+   bujo dump              multiline AI-powered capture
+   bujo dump --retry      re-parse failed AI blocks
+   bujo coach --human     readable coaching insights
+   bujo insights          analytics dashboard
+   bujo week              weekly summary
+   bujo template morning  fill your morning routine
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Run `bujo help` for the full command reference.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+"""  # noqa: E501
+# ─────────────────────────────────────────────────────────────────────────────
+
+
 def main() -> None:
     args = sys.argv[1:]
 
@@ -114,21 +197,21 @@ def main() -> None:
         text = " ".join(args[2:])
         append_entry(symbol, text)
         d = SYMBOL_DISPLAY.get(symbol, symbol)
-        sys.stdout.reconfigure(encoding="utf-8")
+        _reconfigure_stdout()
         print(f"Added: {d} {text}")
 
     elif cmd == "log":
         from bujo.app import today_log, ensure_vault
 
         ensure_vault()
-        sys.stdout.reconfigure(encoding="utf-8")
+        _reconfigure_stdout()
         print(today_log())
 
     elif cmd == "summary":
         from bujo.app import get_all_logs_summary, ensure_vault
 
         ensure_vault()
-        sys.stdout.reconfigure(encoding="utf-8")
+        _reconfigure_stdout()
         print(get_all_logs_summary())
 
     elif cmd == "coach":
@@ -137,7 +220,7 @@ def main() -> None:
 
         engine = InsightsEngine(VAULT)
         report = engine.full_report()
-        sys.stdout.reconfigure(encoding="utf-8")
+        _reconfigure_stdout()
 
         if "--human" in args:
             _print_coach_human(report)
@@ -150,7 +233,7 @@ def main() -> None:
 
         engine = InsightsEngine(VAULT)
         week = engine.weekly_summary()
-        sys.stdout.reconfigure(encoding="utf-8")
+        _reconfigure_stdout()
 
         from datetime import datetime
 
@@ -176,7 +259,7 @@ def main() -> None:
         from bujo.analytics import InsightsEngine
         from bujo.app import VAULT
 
-        sys.stdout.reconfigure(encoding="utf-8")
+        _reconfigure_stdout()
         engine = InsightsEngine(VAULT)
         report = engine.full_report()
 
@@ -219,7 +302,7 @@ def main() -> None:
         symbol, cleaned = parse_quick_input(text)
         append_entry(symbol, cleaned)
         d = SYMBOL_DISPLAY.get(symbol, symbol)
-        sys.stdout.reconfigure(encoding="utf-8")
+        _reconfigure_stdout()
         print(f"Added: {d} {cleaned}")
 
     elif cmd == "template" and len(args) >= 2:
@@ -231,7 +314,7 @@ def main() -> None:
         entries = apply_template(template_name, VAULT)
 
         if not entries:
-            sys.stdout.reconfigure(encoding="utf-8")
+            _reconfigure_stdout()
             print(f"Template '{template_name}' not found or empty.")
             print("Available: morning, evening, weekly")
             return
@@ -239,14 +322,14 @@ def main() -> None:
         for symbol, text in entries:
             append_entry(symbol, text)
 
-        sys.stdout.reconfigure(encoding="utf-8")
+        _reconfigure_stdout()
         print(f"Applied template '{template_name}' ({len(entries)} entries)")
 
     elif cmd == "streak":
         from bujo.analytics import InsightsEngine
         from bujo.app import VAULT
 
-        sys.stdout.reconfigure(encoding="utf-8")
+        _reconfigure_stdout()
         engine = InsightsEngine(VAULT)
         s = engine.streak()
         if s == 0:
@@ -261,13 +344,20 @@ def main() -> None:
 
         print(str(VAULT))
 
+    elif cmd == "tutorial":
+        try:
+            _reconfigure_stdout()
+        except Exception:
+            pass
+        print(TUTORIAL_TEXT)
+
     elif cmd == "dump":
         from bujo.ai import save_dump_and_parse, show_setup_instructions
         from bujo.app import SYMBOL_DISPLAY, ensure_vault, VAULT
         import re
 
         ensure_vault()
-        sys.stdout.reconfigure(encoding="utf-8")
+        _reconfigure_stdout()
 
         # Check for --retry flag
         if "--retry" in args:
@@ -337,8 +427,8 @@ def main() -> None:
                 "dump mode — type freely, submit with Ctrl+Z (Windows) or Ctrl+D (Mac/Linux)"
             )
             print("\u2500" * 50)
+            lines: list[str] = []
             try:
-                lines = []
                 while True:
                     line = input()
                     lines.append(line)
